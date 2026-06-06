@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Esports Isolator — Benchmark HUD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+/* ── HUD Design System — open-design/hud ── */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --color-bg:#0A0A0A;
+  --color-surface:#111316;
+  --color-border:#1E2328;
+  --data-primary:#00D4AA;
+  --data-secondary:#66E0C8;
+  --data-tertiary:#5A7A7A;
+  --data-warning:#FFB800;
+  --data-alert:#FF4757;
+  --data-positive:#00D4AA;
+  --data-negative:#FF4757;
+  --text-primary:#E8E8EC;
+  --text-secondary:#AAAAAA;
+  --glow-primary:rgba(0,212,170,0.10);
+  --glow-alert:rgba(255,71,87,0.10);
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --font-label:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+}
+body{
+  background:var(--color-bg);
+  color:var(--text-primary);
+  font-family:var(--font-mono);
+  line-height:1.4;
+  overflow-x:hidden;
+}
+
+/* ── Light theme ── */
+[data-theme="light"]{
+  --color-bg:#F4F5F7;
+  --color-surface:#FFFFFF;
+  --color-border:#D8DCE2;
+  --data-primary:#0A8F6E;
+  --data-secondary:#0DA882;
+  --data-tertiary:#6B7A85;
+  --data-warning:#C88600;
+  --data-alert:#D93848;
+  --data-positive:#0A8F6E;
+  --data-negative:#D93848;
+  --text-primary:#1A1D23;
+  --text-secondary:#4A5260;
+  --glow-primary:rgba(10,143,110,0.08);
+  --glow-alert:rgba(217,56,72,0.08);
+}
+[data-theme="light"] .kpi-cell:hover{background:rgba(10,143,110,0.04)}
+[data-theme="light"] .kpi-cell.highlight{background:rgba(10,143,110,0.04)}
+[data-theme="light"] .hud-title{text-shadow:none}
+[data-theme="light"] .verdict{background:rgba(10,143,110,0.03)}
+[data-theme="light"] .section-label::before{box-shadow:none}
+[data-theme="light"] .kpi-cell.highlight::before{box-shadow:none}
+[data-theme="light"] .verdict::before{box-shadow:none}
+
+/* ── Theme toggle button ── */
+.theme-toggle{
+  position:fixed;top:16px;right:16px;z-index:100;
+  width:40px;height:40px;
+  background:var(--color-surface);border:1px solid var(--color-border);
+  color:var(--text-primary);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;line-height:1;
+  transition:background 150ms,border-color 150ms,color 150ms;
+}
+.theme-toggle:hover{border-color:var(--data-primary)}
+
+/* ── Smooth theme transition ── */
+body,
+.kpi-cell,.chart-panel,.chart-full,.doughnut-panel,
+.iso-cell,.verdict,table,thead th,tbody tr,footer{
+  transition:background-color 200ms ease,color 200ms ease,border-color 200ms ease;
+}
+
+.container{max-width:1320px;margin:0 auto;padding:0 24px}
+
+/* ── HUD Header ── */
+.hud-header{
+  text-align:center;padding:48px 0 32px;position:relative;
+  border-bottom:1px solid var(--color-border);
+}
+.hud-header::before{
+  content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:400px;height:200px;
+  background:radial-gradient(ellipse at center,rgba(0,212,170,0.04) 0%,transparent 70%);
+  pointer-events:none;
+}
+.hud-title{
+  font-family:var(--font-mono);font-size:2rem;font-weight:700;
+  color:var(--data-primary);letter-spacing:0.08em;
+  text-transform:uppercase;margin-bottom:4px;
+  text-shadow:0 0 16px rgba(0,212,170,0.2);
+}
+.hud-subtitle{
+  font-family:var(--font-label);font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.15em;
+  color:var(--data-tertiary);margin-bottom:12px;
+}
+.hud-tag{
+  display:inline-block;
+  border:1px solid var(--data-tertiary);
+  padding:4px 16px;
+  font-family:var(--font-label);font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.1em;
+  color:var(--data-secondary);
+}
+
+/* ── KPI Readout Strip ── */
+.kpi-strip{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  border-bottom:1px solid var(--color-border);
+}
+.kpi-cell{
+  padding:24px 20px;
+  border-right:1px solid var(--color-border);
+  position:relative;
+  transition:background 150ms ease-out;
+}
+.kpi-cell:last-child{border-right:none}
+.kpi-cell:hover{background:rgba(0,212,170,0.03)}
+.kpi-cell.highlight{background:rgba(0,212,170,0.03)}
+.kpi-cell.highlight::before{
+  content:'';position:absolute;top:0;left:0;width:100%;height:2px;
+  background:var(--data-primary);
+  box-shadow:0 0 8px var(--data-primary);
+}
+.kpi-label{
+  font-family:var(--font-label);font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.12em;
+  color:var(--data-tertiary);margin-bottom:8px;
+}
+.kpi-value{
+  font-family:var(--font-mono);font-size:2rem;font-weight:700;
+  color:var(--text-primary);line-height:1;letter-spacing:0.02em;
+}
+.kpi-value .unit{font-size:0.9rem;color:var(--data-tertiary);font-weight:400}
+.kpi-delta{
+  font-family:var(--font-mono);font-size:12px;font-weight:600;
+  margin-top:6px;
+}
+.kpi-delta.pos{color:var(--data-positive)}
+.kpi-delta.neg{color:var(--data-negative)}
+.kpi-baseline{
+  font-family:var(--font-mono);font-size:10px;
+  color:var(--data-tertiary);margin-top:2px;
+}
+
+/* ── Section ── */
+.section{padding:40px 0;border-bottom:1px solid var(--color-border)}
+.section:last-child{border-bottom:none}
+.section-label{
+  font-family:var(--font-label);font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.15em;
+  color:var(--data-tertiary);margin-bottom:20px;
+  display:flex;align-items:center;gap:8px;
+}
+.section-label::before{
+  content:'';display:inline-block;width:6px;height:6px;
+  background:var(--data-primary);
+  box-shadow:0 0 4px var(--data-primary);
+}
+
+/* ── Chart Grid ── */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.chart-panel{
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  padding:20px;
+}
+.chart-panel h3{
+  font-family:var(--font-label);font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.1em;
+  color:var(--data-tertiary);margin-bottom:14px;
+}
+.chart-full{
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  padding:20px;margin-top:-1px;
+}
+.chart-full h3{
+  font-family:var(--font-label);font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.1em;
+  color:var(--data-tertiary);margin-bottom:14px;
+}
+
+/* ── Doughnut row ── */
+.doughnut-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.doughnut-panel{
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  padding:20px;
+}
+.doughnut-panel h3{
+  font-family:var(--font-label);font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.1em;
+  color:var(--data-tertiary);margin-bottom:14px;
+}
+
+/* ── Data Table (trading-terminal style) ── */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:12px}
+thead th{
+  background:var(--color-surface);
+  font-family:var(--font-label);font-size:9px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.08em;
+  color:var(--data-tertiary);
+  padding:10px 12px;text-align:right;
+  border-bottom:1px solid var(--color-border);
+  position:sticky;top:0;
+}
+thead th:first-child{text-align:left}
+tbody td{
+  padding:8px 12px;text-align:right;
+  border-bottom:1px solid var(--color-border);
+  color:var(--text-secondary);
+}
+tbody td:first-child{
+  text-align:left;font-weight:600;color:var(--text-primary);
+}
+tbody tr{background:var(--color-bg);transition:background 100ms linear}
+tbody tr:hover{background:var(--color-surface)}
+.td-better{color:var(--data-primary);font-weight:600}
+.td-worse{color:var(--data-alert);font-weight:600}
+
+/* ── Isolator Stats Grid ── */
+.iso-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
+.iso-cell{
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  padding:20px;
+  margin-top:-1px;margin-left:-1px;
+}
+.iso-cell-label{
+  font-family:var(--font-label);font-size:9px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.1em;
+  color:var(--data-tertiary);margin-bottom:6px;
+}
+.iso-cell-value{
+  font-family:var(--font-mono);font-size:1.4rem;font-weight:700;
+  color:var(--text-primary);line-height:1;
+}
+.iso-cell-desc{
+  font-family:var(--font-label);font-size:10px;
+  color:var(--data-tertiary);margin-top:6px;line-height:1.5;
+}
+.iso-cell-value.warning{color:var(--data-warning)}
+
+/* ── Verdict ── */
+.verdict{
+  border:1px solid var(--data-primary);
+  padding:28px;text-align:center;
+  position:relative;
+  background:rgba(0,212,170,0.02);
+}
+.verdict::before{
+  content:'';position:absolute;top:0;left:0;width:100%;height:1px;
+  background:var(--data-primary);
+  box-shadow:0 0 8px var(--data-primary);
+}
+.verdict h2{
+  font-family:var(--font-mono);font-size:14px;font-weight:700;
+  text-transform:uppercase;letter-spacing:0.1em;
+  color:var(--data-primary);margin-bottom:12px;
+}
+.verdict p{
+  font-family:var(--font-label);font-size:13px;
+  color:var(--text-secondary);max-width:700px;margin:0 auto;line-height:1.8;
+}
+.verdict .hl{color:var(--data-primary);font-weight:700}
+
+/* ── Footer ── */
+footer{
+  text-align:center;padding:32px 0;
+  font-family:var(--font-label);font-size:9px;
+  text-transform:uppercase;letter-spacing:0.1em;
+  color:var(--data-tertiary);
+  border-top:1px solid var(--color-border);
+}
+
+/* ── Responsive ── */
+@media(max-width:900px){
+  .kpi-strip{grid-template-columns:repeat(2,1fr)}
+  .chart-grid,.doughnut-grid{grid-template-columns:1fr}
+  .iso-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:560px){
+  .kpi-strip{grid-template-columns:1fr}
+  .iso-grid{grid-template-columns:1fr}
+  .hud-title{font-size:1.4rem}
+}
+</style>
+</head>
+<body data-theme="dark">
+
+<!-- Theme toggle -->
+<button class="theme-toggle" onclick="toggleTheme()" title="Switch theme" aria-label="Switch theme">
+  <span id="themeIcon">&#9788;</span>
+</button>
+
+<div class="container">
+
+  <!-- ═══ HUD HEADER ═══ -->
+  <div class="hud-header">
+    <div class="hud-title">Esports Isolator PRO</div>
+    <div class="hud-subtitle">Benchmark Telemetry — VProf Performance Report</div>
+    <span class="hud-tag">Counter-Strike 2 &mdash; cs2.exe</span>
+  </div>
+
+  <!-- ═══ KPI READOUT STRIP ═══ -->
+  <div class="kpi-strip">
+    <div class="kpi-cell highlight">
+      <div class="kpi-label">Average FPS</div>
+      <div class="kpi-value">619.7</div>
+      <div class="kpi-delta pos">&#9650; +9.8%</div>
+      <div class="kpi-baseline">BASELINE 564.5 FPS</div>
+    </div>
+    <div class="kpi-cell">
+      <div class="kpi-label">1% Low FPS</div>
+      <div class="kpi-value">207.1</div>
+      <div class="kpi-delta pos">&#9650; +1.5%</div>
+      <div class="kpi-baseline">BASELINE 204.1 FPS</div>
+    </div>
+    <div class="kpi-cell">
+      <div class="kpi-label">Avg Frame Time</div>
+      <div class="kpi-value">1.61 <span class="unit">ms</span></div>
+      <div class="kpi-delta pos">&#9660; &minus;9.0%</div>
+      <div class="kpi-baseline">BASELINE 1.77 ms</div>
+    </div>
+    <div class="kpi-cell highlight">
+      <div class="kpi-label">P95 Spike (Worst 1s)</div>
+      <div class="kpi-value">6.56 <span class="unit">ms</span></div>
+      <div class="kpi-delta pos">&#9660; &minus;26.0%</div>
+      <div class="kpi-baseline">BASELINE 8.87 ms</div>
+    </div>
+  </div>
+
+  <!-- ═══ FRAME TIME ANALYSIS ═══ -->
+  <div class="section">
+    <div class="section-label">Frame Time Analysis</div>
+    <div class="chart-grid">
+      <div class="chart-panel">
+        <h3>Average Frame Time by Subsystem (ms)</h3>
+        <canvas id="chartAvg"></canvas>
+      </div>
+      <div class="chart-panel">
+        <h3>P95 Worst-Second Spikes (ms)</h3>
+        <canvas id="chartP95"></canvas>
+      </div>
+    </div>
+    <div class="chart-full">
+      <h3>Spike Reduction — P95 1s-Max Improvement (%)</h3>
+      <canvas id="chartImprovement" height="100"></canvas>
+    </div>
+  </div>
+
+  <!-- ═══ CLIENT VS SERVER BREAKDOWN ═══ -->
+  <div class="section">
+    <div class="section-label">Client vs Server Breakdown</div>
+    <div class="doughnut-grid">
+      <div class="doughnut-panel">
+        <h3>Client-Side Frame Budget (ms avg)</h3>
+        <canvas id="chartClient"></canvas>
+      </div>
+      <div class="doughnut-panel">
+        <h3>Server-Side Frame Budget (ms avg)</h3>
+        <canvas id="chartServer"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ FULL TABLE ═══ -->
+  <div class="section">
+    <div class="section-label">Full VProf Comparison Table</div>
+    <div class="table-wrap">
+      <table id="vprofTable">
+        <thead>
+          <tr>
+            <th style="min-width:180px">Metric</th>
+            <th>Without<br>Avg (ms)</th>
+            <th>With<br>Avg (ms)</th>
+            <th>&Delta; Avg</th>
+            <th>Without<br>P99 (ms)</th>
+            <th>With<br>P99 (ms)</th>
+            <th>Without<br>1s P95 (ms)</th>
+            <th>With<br>1s P95 (ms)</th>
+            <th>&Delta; P95 Spike</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ ISOLATOR STATS ═══ -->
+  <div class="section">
+    <div class="section-label">What Esports Isolator Did</div>
+    <div class="iso-grid">
+      <div class="iso-cell">
+        <div class="iso-cell-label">Processes Throttled</div>
+        <div class="iso-cell-value">126</div>
+        <div class="iso-cell-desc">Background processes jailed: CPU, priority, I/O restricted to free resources for game</div>
+      </div>
+      <div class="iso-cell">
+        <div class="iso-cell-label">CPU Partitioning</div>
+        <div class="iso-cell-value">10 / 4 / 2</div>
+        <div class="iso-cell-desc">10 cores game &bull; 4 cores background &bull; 2 cores housekeeping — hard isolation via CPU Sets</div>
+      </div>
+      <div class="iso-cell">
+        <div class="iso-cell-label">Power Scheme</div>
+        <div class="iso-cell-value warning">HIGH PERF</div>
+        <div class="iso-cell-desc">High Performance plan activated, power-saving latency eliminated</div>
+      </div>
+      <div class="iso-cell">
+        <div class="iso-cell-label">Python GC</div>
+        <div class="iso-cell-value">DISABLED</div>
+        <div class="iso-cell-desc">Garbage collector off during gameplay to prevent 30-50ms micro-stutter pauses</div>
+      </div>
+      <div class="iso-cell">
+        <div class="iso-cell-label">Anti-Cheat Mode</div>
+        <div class="iso-cell-value">AGGRESSIVE</div>
+        <div class="iso-cell-desc">Maximum isolation without anti-cheat conflicts</div>
+      </div>
+      <div class="iso-cell">
+        <div class="iso-cell-label">Full Restore</div>
+        <div class="iso-cell-value">125 / 125</div>
+        <div class="iso-cell-desc">All 125 processes restored after game exit. 0 failures</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ VERDICT ═══ -->
+  <div class="section">
+    <div class="verdict">
+      <h2>[ Assessment ]</h2>
+      <p>
+        Esports Isolator delivered <span class="hl">+9.8% average FPS</span> and
+        <span class="hl">up to &minus;87% peak latency spikes</span> across subsystems.
+        Most significant: frame time stabilization — P95 spikes dropped from 8.87ms to 6.56ms (&minus;26%),
+        client rendering spikes fell from 5.29ms to 2.75ms (&minus;48%).
+        Gameplay became significantly smoother through isolation of 126 background processes onto dedicated cores.
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <div class="container">
+    Esports Isolator PRO &bull; Benchmark Report &bull; CS2 VProf Data &bull; HUD Design System
+  </div>
+</footer>
+
+<script>
+// ── DATA ──
+const metrics = [
+  { name:'FrameTotal',          wAvg:1.77, wP99:4.00, wP95s:8.87, iAvg:1.61, iP99:4.83, iP95s:6.56 },
+  { name:'Client Rendering',    wAvg:1.08, wP99:1.72, wP95s:5.29, iAvg:0.98, iP99:1.88, iP95s:2.75 },
+  { name:'Frame Boundary',      wAvg:0.67, wP99:1.30, wP95s:4.86, iAvg:0.63, iP99:1.38, iP95s:2.36 },
+  { name:'Client Simulation',   wAvg:0.27, wP99:0.88, wP95s:4.26, iAvg:0.25, iP99:0.83, iP95s:1.35 },
+  { name:'ClientSimulateFrame', wAvg:0.23, wP99:0.53, wP95s:4.08, iAvg:0.21, iP99:0.42, iP95s:0.73 },
+  { name:'Server Simulation',   wAvg:1.61, wP99:2.74, wP95s:5.73, iAvg:1.54, iP99:2.55, iP95s:3.25 },
+  { name:'Server Game',         wAvg:1.39, wP99:2.54, wP95s:5.41, iAvg:1.28, iP99:2.15, iP95s:2.88 },
+  { name:'HUD',                 wAvg:0.08, wP99:0.38, wP95s:3.88, iAvg:0.07, iP99:0.13, iP95s:0.48 },
+  { name:'Unaccounted',         wAvg:0.08, wP99:0.36, wP95s:0.71, iAvg:0.07, iP99:0.30, iP95s:0.58 },
+  { name:'UserCommands',        wAvg:0.54, wP99:0.97, wP95s:4.13, iAvg:0.51, iP99:0.94, iP95s:1.28 },
+  { name:'Present_RenderDevice',wAvg:0.04, wP99:0.51, wP95s:2.08, iAvg:0.07, iP99:0.82, iP95s:1.49 },
+  { name:'ClientSimulateTick',  wAvg:0.38, wP99:0.74, wP95s:1.00, iAvg:0.34, iP99:0.71, iP95s:0.82 },
+  { name:'Server Animation',    wAvg:0.21, wP99:0.47, wP95s:0.61, iAvg:0.21, iP99:0.44, iP95s:0.83 },
+  { name:'NPCs',                wAvg:0.18, wP99:0.43, wP95s:0.78, iAvg:0.16, iP99:0.52, iP95s:0.52 },
+  { name:'Server Send Net',     wAvg:0.17, wP99:0.39, wP95s:0.51, iAvg:0.16, iP99:0.35, iP95s:0.52 },
+  { name:'Networking',          wAvg:0.15, wP99:0.35, wP95s:0.43, iAvg:0.14, iP99:0.34, iP95s:0.58 },
+  { name:'InterpolationLatch',  wAvg:0.13, wP99:0.31, wP95s:0.43, iAvg:0.12, iP99:0.25, iP95s:0.45 },
+  { name:'SoundOperators',      wAvg:0.20, wP99:0.53, wP95s:3.33, iAvg:0.16, iP99:0.38, iP95s:0.38 },
+];
+
+const topN = metrics.slice(0, 8);
+
+const clientMetrics = [
+  { name: 'Rendering', w: 1.08, i: 0.98 },
+  { name: 'Simulation', w: 0.27, i: 0.25 },
+  { name: 'HUD', w: 0.08, i: 0.07 },
+  { name: 'Frame Boundary', w: 0.67, i: 0.63 },
+  { name: 'Other', w: 0.13, i: 0.11 },
+];
+const serverMetrics = [
+  { name: 'Server Game', w: 1.39, i: 1.28 },
+  { name: 'Animation', w: 0.21, i: 0.21 },
+  { name: 'NPCs', w: 0.18, i: 0.16 },
+  { name: 'Networking', w: 0.15, i: 0.14 },
+  { name: 'UserCommands', w: 0.54, i: 0.51 },
+];
+const improvData = topN.map(m => {
+  const pct = ((m.wP95s - m.iP95s) / m.wP95s * 100);
+  return Math.round(pct * 10) / 10;
+});
+
+// ── Theme palettes ──
+const THEMES = {
+  dark: {
+    primary: '#00D4AA', primaryDim: 'rgba(0,212,170,0.25)',
+    alert: '#FF4757', alertDim: 'rgba(255,71,87,0.20)',
+    warning: '#FFB800', secondary: '#66E0C8', tertiary: '#5A7A7A',
+    blue: '#5A8FBF', border: 'rgba(30,35,40,0.6)', text: '#8888a0',
+    doughnutBorder: 0,
+  },
+  light: {
+    primary: '#0A8F6E', primaryDim: 'rgba(10,143,110,0.18)',
+    alert: '#D93848', alertDim: 'rgba(217,56,72,0.15)',
+    warning: '#C88600', secondary: '#0DA882', tertiary: '#6B7A85',
+    blue: '#3A7ABF', border: 'rgba(0,0,0,0.08)', text: '#6B7A85',
+    doughnutBorder: 2,
+  },
+};
+
+let chartInstances = [];
+
+function getThemePalette() {
+  const t = document.body.getAttribute('data-theme') || 'dark';
+  return THEMES[t] || THEMES.dark;
+}
+
+function buildCharts() {
+  chartInstances.forEach(c => c.destroy());
+  chartInstances = [];
+  const P = getThemePalette();
+
+  Chart.defaults.color = P.text;
+  Chart.defaults.borderColor = P.border;
+  Chart.defaults.font.family = "'JetBrains Mono', monospace";
+  Chart.defaults.font.size = 11;
+
+  const barOpts = (axis='x') => ({
+    responsive: true,
+    plugins: {
+      legend: { labels: { usePointStyle: true, pointStyle: 'rect', padding: 16, font:{size:10}, color: P.text } },
+      tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.raw + (axis==='x'?' ms':' ms') } }
+    },
+    scales: {
+      x: { ticks: { font:{size:9}, maxRotation:45, color: P.text }, grid:{color: P.border} },
+      y: { beginAtZero: true, title: { display: true, text: 'ms', font:{size:10}, color: P.text }, ticks:{color: P.text}, grid:{color: P.border} }
+    }
+  });
+
+  chartInstances.push(new Chart(document.getElementById('chartAvg'), {
+    type: 'bar',
+    data: {
+      labels: topN.map(m => m.name),
+      datasets: [
+        { label: 'Without', data: topN.map(m => m.wAvg),
+          backgroundColor: P.alertDim, borderColor: P.alert, borderWidth: 1 },
+        { label: 'With Isolator', data: topN.map(m => m.iAvg),
+          backgroundColor: P.primaryDim, borderColor: P.primary, borderWidth: 1 },
+      ]
+    },
+    options: barOpts()
+  }));
+
+  chartInstances.push(new Chart(document.getElementById('chartP95'), {
+    type: 'bar',
+    data: {
+      labels: topN.map(m => m.name),
+      datasets: [
+        { label: 'Without', data: topN.map(m => m.wP95s),
+          backgroundColor: P.alertDim, borderColor: P.alert, borderWidth: 1 },
+        { label: 'With Isolator', data: topN.map(m => m.iP95s),
+          backgroundColor: P.primaryDim, borderColor: P.primary, borderWidth: 1 },
+      ]
+    },
+    options: barOpts()
+  }));
+
+  chartInstances.push(new Chart(document.getElementById('chartImprovement'), {
+    type: 'bar',
+    data: {
+      labels: topN.map(m => m.name),
+      datasets: [{
+        label: 'P95 Spike Reduction (%)',
+        data: improvData,
+        backgroundColor: improvData.map(v => v >= 0 ? P.primaryDim : P.alertDim),
+        borderColor: improvData.map(v => v >= 0 ? P.primary : P.alert),
+        borderWidth: 1,
+      }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.raw + '% reduction' } } },
+      scales: {
+        x: { beginAtZero: true, title: { display: true, text: '% improvement', font:{size:10}, color: P.text },
+             ticks: { callback: v => v + '%', color: P.text }, grid:{color: P.border} },
+        y: { ticks:{color: P.text}, grid:{color: P.border} }
+      }
+    }
+  }));
+
+  const doughnutOpts = { responsive: true, cutout: '40%', plugins: {
+    legend: { position: 'bottom', labels: { padding: 12, font:{size:10}, color: P.text } },
+    tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.raw + ' ms' } }
+  }};
+  const dbw = P.doughnutBorder;
+  const dbc = P.border;
+
+  chartInstances.push(new Chart(document.getElementById('chartClient'), {
+    type: 'doughnut',
+    data: {
+      labels: clientMetrics.map(m => m.name),
+      datasets: [
+        { label: 'With Isolator', data: clientMetrics.map(m => m.i),
+          backgroundColor: [P.primary, P.secondary, P.warning, P.blue, P.tertiary],
+          borderWidth: dbw, borderColor: dbc },
+        { label: 'Without', data: clientMetrics.map(m => m.w),
+          backgroundColor: [P.primaryDim, P.primaryDim, P.alertDim, P.alertDim, P.border],
+          borderWidth: dbw, borderColor: dbc },
+      ]
+    },
+    options: doughnutOpts
+  }));
+
+  chartInstances.push(new Chart(document.getElementById('chartServer'), {
+    type: 'doughnut',
+    data: {
+      labels: serverMetrics.map(m => m.name),
+      datasets: [
+        { label: 'With Isolator', data: serverMetrics.map(m => m.i),
+          backgroundColor: [P.primary, P.blue, P.warning, P.secondary, P.tertiary],
+          borderWidth: dbw, borderColor: dbc },
+        { label: 'Without', data: serverMetrics.map(m => m.w),
+          backgroundColor: [P.primaryDim, P.alertDim, P.alertDim, P.primaryDim, P.border],
+          borderWidth: dbw, borderColor: dbc },
+      ]
+    },
+    options: doughnutOpts
+  }));
+}
+
+// ── Theme toggle ──
+function toggleTheme() {
+  const body = document.body;
+  const next = body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  body.setAttribute('data-theme', next);
+  document.getElementById('themeIcon').innerHTML = next === 'dark' ? '&#9788;' : '&#9790;';
+  try { localStorage.setItem('hud-theme', next); } catch(e) {}
+  buildCharts();
+}
+
+// ── Init: restore saved theme ──
+(function initTheme() {
+  let saved = 'dark';
+  try { saved = localStorage.getItem('hud-theme') || 'dark'; } catch(e) {}
+  document.body.setAttribute('data-theme', saved);
+  document.getElementById('themeIcon').innerHTML = saved === 'dark' ? '&#9788;' : '&#9790;';
+})();
+
+buildCharts();
+
+// ── TABLE ──
+const tbody = document.querySelector('#vprofTable tbody');
+metrics.forEach(m => {
+  const dAvg = ((m.iAvg - m.wAvg) / m.wAvg * 100).toFixed(1);
+  const dP95 = ((m.iP95s - m.wP95s) / m.wP95s * 100).toFixed(1);
+  const avgClass = dAvg <= 0 ? 'td-better' : 'td-worse';
+  const p95Class = dP95 <= 0 ? 'td-better' : 'td-worse';
+  const avgSign = dAvg <= 0 ? '' : '+';
+  const p95Sign = dP95 <= 0 ? '' : '+';
+
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>${m.name}</td>
+    <td>${m.wAvg.toFixed(2)}</td>
+    <td>${m.iAvg.toFixed(2)}</td>
+    <td class="${avgClass}">${avgSign}${dAvg}%</td>
+    <td>${m.wP99.toFixed(2)}</td>
+    <td>${m.iP99.toFixed(2)}</td>
+    <td>${m.wP95s.toFixed(2)}</td>
+    <td>${m.iP95s.toFixed(2)}</td>
+    <td class="${p95Class}">${p95Sign}${dP95}%</td>
+  `;
+  tbody.appendChild(tr);
+});
+</script>
+</body>
+</html>

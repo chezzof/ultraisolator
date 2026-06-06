@@ -1,0 +1,38 @@
+{
+  "games": ["cs2.exe"],
+  "auto_detect_steam_games": true,
+  "auto_detect_epic_games": true,
+  "steam_library_paths": [],
+  "epic_library_paths": [],
+
+  "enable_background_jailing": false,
+  "maintenance_jail_batch_size": 4,
+  "maintenance_jail_interval_ms": 30000,
+  "maintenance_jail_batch_cooldown_ms": 5000,
+  "maintenance_skip_after_quiet_cycles": 3,
+
+  "poll_interval_active_ms": 5000,
+  "poll_interval_idle_ms": 1000,
+  "housekeeping_cores": 1,
+
+  "disable_power_scheme_switch": false,
+  "disable_timer_resolution_tweak": false,
+  "disable_game_priority_boost": false,
+  "game_close_debounce_s": 3,
+  "game_exit_restore_delay_s": 10,
+  "gc_full_collect_interval_s": 1800,
+
+  "anti_cheat_mode": "aggressive",
+  "protected_extra": [],
+  "app_profiles": [
+    {
+      "exe": "obs64.exe",
+      "enabled": false,
+      "treat_as_game": false,
+      "never_jail": true,
+      "always_jail": false,
+      "priority_class": ""
+    }
+  ],
+  "log_file": ""
+}

@@ -1,0 +1,276 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1280" height="400" viewBox="0 0 1280 400" fill="none" role="img" aria-label="Esports Isolator PRO - Windows process tuner for competitive games">
+  <defs>
+    <!-- backdrop -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E1216"/>
+      <stop offset="0.55" stop-color="#0A0D10"/>
+      <stop offset="1" stop-color="#060709"/>
+    </linearGradient>
+    <radialGradient id="glowTop" cx="0.42" cy="-0.05" r="0.85">
+      <stop offset="0" stop-color="#00D4AA" stop-opacity="0.20"/>
+      <stop offset="0.5" stop-color="#00D4AA" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#00D4AA" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowShield" cx="0.13" cy="0.55" r="0.4">
+      <stop offset="0" stop-color="#00E6BD" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#00E6BD" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.46" r="0.85">
+      <stop offset="0.55" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.6"/>
+    </radialGradient>
+
+    <!-- shield -->
+    <linearGradient id="shieldBody" x1="34" y1="22" x2="130" y2="152" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6BF3DA"/>
+      <stop offset="0.5" stop-color="#19D6B0"/>
+      <stop offset="1" stop-color="#009E80"/>
+    </linearGradient>
+    <linearGradient id="shieldRim" x1="34" y1="22" x2="130" y2="152" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BFFFF0" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#00B894" stop-opacity="0.2"/>
+    </linearGradient>
+    <linearGradient id="bars" x1="0" y1="78" x2="0" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#EAFFFB"/>
+      <stop offset="1" stop-color="#19D6B0"/>
+    </linearGradient>
+    <radialGradient id="shieldSpec" cx="0.32" cy="0.22" r="0.5">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- type -->
+    <linearGradient id="metal" x1="0" y1="98" x2="0" y2="156" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#DCEFEA"/>
+      <stop offset="1" stop-color="#8FE9D6"/>
+    </linearGradient>
+    <linearGradient id="value" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5BF0D5"/>
+      <stop offset="1" stop-color="#00C9A4"/>
+    </linearGradient>
+    <linearGradient id="divline" x1="362" y1="0" x2="932" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00D4AA" stop-opacity="0.65"/>
+      <stop offset="0.7" stop-color="#00D4AA" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#00D4AA" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- cards -->
+    <linearGradient id="card" x1="0" y1="250" x2="0" y2="324" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#191F25"/>
+      <stop offset="1" stop-color="#0C1014"/>
+    </linearGradient>
+    <linearGradient id="cardHi" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- equalizer / graph -->
+    <linearGradient id="coreOn" x1="0" y1="60" x2="0" y2="322" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7CFFE6"/>
+      <stop offset="1" stop-color="#00B894"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00D4AA" stop-opacity="0"/>
+      <stop offset="0.22" stop-color="#00D4AA" stop-opacity="0.9"/>
+      <stop offset="0.78" stop-color="#33E7C4" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#33E7C4" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="area" x1="0" y1="320" x2="0" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00D4AA" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#00D4AA" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="topframe" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="softglow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shieldGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+
+    <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="#FFFFFF" opacity="0.025"/>
+    </pattern>
+
+    <clipPath id="wmClip">
+      <text x="362" y="150" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="60" font-weight="800" letter-spacing="2">ESPORTS ISOLATOR</text>
+    </clipPath>
+    <clipPath id="shieldClip">
+      <path d="M82 22 130 48v38c0 33-19 57-48 66-29-9-48-33-48-66V48l48-26Z" transform="translate(96 86) scale(1.65)"/>
+    </clipPath>
+    <clipPath id="divClip">
+      <rect x="362" y="163" width="566" height="3"/>
+    </clipPath>
+
+    <style>
+      @keyframes breathe   { 0%,100% { opacity:.5 } 50% { opacity:1 } }
+      @keyframes haloPulse { 0%,100% { opacity:.4 } 50% { opacity:.9 } }
+      @keyframes fadeUp    { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:translateY(0) } }
+      @keyframes chipIn    { from { opacity:0; transform:translateY(20px) } to { opacity:1; transform:translateY(0) } }
+      @keyframes coreWave  { 0%,100% { opacity:.35 } 50% { opacity:1 } }
+      @keyframes valueGlow { 0%,100% { opacity:.86 } 50% { opacity:1 } }
+      @keyframes accentRun { 0% { opacity:.45 } 50% { opacity:1 } 100% { opacity:.45 } }
+      @keyframes drift     { 0% { transform:translateY(0); opacity:0 } 20% { opacity:.7 } 80% { opacity:.7 } 100% { transform:translateY(-52px); opacity:0 } }
+      @keyframes draw      { to { stroke-dashoffset:0 } }
+
+      .glowlayer { animation: breathe 7s ease-in-out infinite; }
+      .halo      { animation: haloPulse 4s ease-in-out infinite; transform-box: fill-box; transform-origin:center; }
+      .fade-up   { opacity:0; animation: fadeUp .85s cubic-bezier(.2,.7,.2,1) forwards; }
+      .d1 { animation-delay:.10s } .d2 { animation-delay:.30s } .d3 { animation-delay:.50s }
+      .chip      { opacity:0; animation: chipIn .75s cubic-bezier(.2,.7,.2,1) forwards; }
+      .c1 { animation-delay:.70s } .c2 { animation-delay:.85s } .c3 { animation-delay:1.0s } .c4 { animation-delay:1.15s }
+      .val       { animation: valueGlow 3s ease-in-out infinite; }
+      .core      { animation: coreWave 2.6s ease-in-out infinite; }
+      .k1 { animation-delay:0s } .k2 { animation-delay:.45s } .k3 { animation-delay:.9s }
+      .accent    { animation: accentRun 4.5s ease-in-out infinite; }
+      .spark     { stroke-dasharray:1700; stroke-dashoffset:1700; animation: draw 2.6s ease-out .4s forwards; }
+      .pUp { animation: drift 5.5s ease-in-out infinite; }
+      .p2 { animation-delay:1.3s } .p3 { animation-delay:2.6s } .p4 { animation-delay:3.4s } .p5 { animation-delay:.7s }
+
+      @media (prefers-reduced-motion: reduce) {
+        .glowlayer,.halo,.fade-up,.chip,.val,.core,.accent,.spark,.pUp { animation: none !important; }
+        .fade-up,.chip { opacity:1 !important; }
+        .spark { stroke-dashoffset:0 !important; }
+      }
+    </style>
+  </defs>
+
+  <!-- base -->
+  <rect width="1280" height="400" fill="url(#bg)"/>
+  <rect width="1280" height="400" fill="url(#dots)"/>
+  <rect class="glowlayer" width="1280" height="400" fill="url(#glowTop)"/>
+  <rect width="1280" height="400" fill="url(#glowShield)"/>
+  <rect width="1280" height="2" fill="url(#topframe)"/>
+
+  <!-- ambient particles -->
+  <g fill="#00E6BD">
+    <circle class="pUp"    cx="250" cy="300" r="2.0" opacity="0"/>
+    <circle class="pUp p2" cx="190" cy="330" r="1.5" opacity="0"/>
+    <circle class="pUp p3" cx="300" cy="320" r="1.7" opacity="0"/>
+    <circle class="pUp p4" cx="150" cy="300" r="1.3" opacity="0"/>
+    <circle class="pUp p5" cx="225" cy="290" r="1.4" opacity="0"/>
+  </g>
+
+  <!-- right-side core activity equalizer -->
+  <g>
+    <text x="1240" y="56" text-anchor="end" fill="#5C666D" font-family="'JetBrains Mono', Consolas, monospace" font-size="11" font-weight="700" letter-spacing="3">CORE ACTIVITY</text>
+    <g fill="#1E262C">
+      <rect x="1104" y="210" width="8" height="112" rx="4"/>
+      <rect x="1120" y="150" width="8" height="172" rx="4"/>
+      <rect x="1136" y="246" width="8" height="76"  rx="4"/>
+      <rect x="1168" y="170" width="8" height="152" rx="4"/>
+      <rect x="1200" y="200" width="8" height="122" rx="4"/>
+      <rect x="1216" y="130" width="8" height="192" rx="4"/>
+      <rect x="1232" y="224" width="8" height="98"  rx="4"/>
+    </g>
+    <g fill="url(#coreOn)" filter="url(#softglow)">
+      <rect class="core k1" x="1152" y="96" width="8" height="226" rx="4"/>
+      <rect class="core k2" x="1184" y="70" width="8" height="252" rx="4"/>
+    </g>
+    <g fill="#9CFFEC">
+      <circle class="core k1" cx="1156" cy="96" r="2.4"/>
+      <circle class="core k2" cx="1188" cy="70" r="2.4"/>
+    </g>
+  </g>
+
+  <!-- shield mark -->
+  <g>
+    <g class="halo" filter="url(#shieldGlow)">
+      <path d="M82 22 130 48v38c0 33-19 57-48 66-29-9-48-33-48-66V48l48-26Z" transform="translate(96 86) scale(1.65)" fill="#00E6BD"/>
+    </g>
+    <g transform="translate(96 86) scale(1.65)">
+      <path d="M82 22 130 48v38c0 33-19 57-48 66-29-9-48-33-48-66V48l48-26Z" fill="url(#shieldBody)"/>
+      <path d="M82 22 130 48v38c0 33-19 57-48 66-29-9-48-33-48-66V48l48-26Z" fill="none" stroke="url(#shieldRim)" stroke-width="1.4"/>
+      <path d="M82 48 108 62v22c0 18-9 32-26 39-17-7-26-21-26-39V62l26-14Z" fill="#0A0D10"/>
+      <path d="M68 78h8v32h-8zm10 0h8v32h-8zm10 0h8v32h-8z" fill="url(#bars)"/>
+    </g>
+    <!-- specular highlight -->
+    <g clip-path="url(#shieldClip)">
+      <ellipse cx="170" cy="150" rx="70" ry="60" fill="url(#shieldSpec)"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <g class="fade-up d1">
+    <text x="362" y="150" fill="url(#metal)" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="60" font-weight="800" letter-spacing="2">ESPORTS ISOLATOR</text>
+  </g>
+  <!-- light sweep across the wordmark -->
+  <g clip-path="url(#wmClip)">
+    <rect y="90" width="150" height="80" fill="url(#shine)">
+      <animate attributeName="x" from="300" to="1180" dur="3.8s" begin="1.2s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- divider with travelling sheen -->
+  <g class="fade-up d2">
+    <rect x="362" y="164" width="566" height="1.5" fill="url(#divline)"/>
+  </g>
+  <g clip-path="url(#divClip)">
+    <rect y="163" width="120" height="3" fill="#BFFFF0" opacity="0.7">
+      <animate attributeName="x" from="362" to="930" dur="4.2s" begin="1.4s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- PRO badge + tagline -->
+  <g class="fade-up d3">
+    <rect x="362" y="180" width="108" height="42" rx="9" fill="#0D1216" stroke="url(#shieldRim)" stroke-width="1.6"/>
+    <text x="416" y="208" fill="#5BF0D5" text-anchor="middle" font-family="'JetBrains Mono', Consolas, monospace" font-size="24" font-weight="800" letter-spacing="7">PRO</text>
+    <text x="492" y="208" fill="#9AA4AB" font-family="Inter, 'Segoe UI', sans-serif" font-size="22" font-weight="500">Windows process tuner for competitive games</text>
+  </g>
+
+  <!-- stat cards -->
+  <g font-family="'JetBrains Mono', Consolas, monospace" font-weight="700">
+    <g class="chip c1">
+      <rect x="362" y="250" width="168" height="74" rx="12" fill="url(#card)" stroke="#262E35" stroke-width="1.25"/>
+      <rect x="375" y="251.5" width="142" height="1.5" fill="url(#cardHi)"/>
+      <text class="val" x="382" y="291" fill="url(#value)" font-size="26">+9.8%</text>
+      <text x="382" y="311" fill="#7C868D" font-size="11" letter-spacing="1.6">AVG FPS</text>
+    </g>
+    <g class="chip c2">
+      <rect x="547" y="250" width="168" height="74" rx="12" fill="url(#card)" stroke="#262E35" stroke-width="1.25"/>
+      <rect x="560" y="251.5" width="142" height="1.5" fill="url(#cardHi)"/>
+      <text class="val" x="567" y="291" fill="url(#value)" font-size="26">&#8722;26%</text>
+      <text x="567" y="311" fill="#7C868D" font-size="11" letter-spacing="1.6">P95 SPIKE</text>
+    </g>
+    <g class="chip c3">
+      <rect x="732" y="250" width="168" height="74" rx="12" fill="url(#card)" stroke="#262E35" stroke-width="1.25"/>
+      <rect x="745" y="251.5" width="142" height="1.5" fill="url(#cardHi)"/>
+      <text x="752" y="291" fill="#EEF1F3" font-size="26">126</text>
+      <text x="752" y="311" fill="#7C868D" font-size="11" letter-spacing="1.6">PROCS JAILED</text>
+    </g>
+    <g class="chip c4">
+      <rect x="917" y="250" width="168" height="74" rx="12" fill="url(#card)" stroke="#262E35" stroke-width="1.25"/>
+      <rect x="930" y="251.5" width="142" height="1.5" fill="url(#cardHi)"/>
+      <text x="937" y="291" fill="#EEF1F3" font-size="26">0</text>
+      <text x="937" y="311" fill="#7C868D" font-size="11" letter-spacing="1.6">RESTORE FAILS</text>
+    </g>
+  </g>
+
+  <!-- frame-time graph: chaotic -> stabilized, area fill + self-drawing line + live dot -->
+  <path d="M0 360 L120 360 L150 342 L168 372 L196 330 L214 378 L246 338 L270 366 L300 348 L640 348 L700 350 L760 349 L900 350 L1010 350 L1120 350 L1280 350 L1280 400 L0 400 Z"
+        fill="url(#area)"/>
+  <path id="ftline" d="M0 360 L120 360 L150 342 L168 372 L196 330 L214 378 L246 338 L270 366 L300 348 L640 348 L700 350 L760 349 L900 350 L1010 350 L1120 350 L1280 350"
+        fill="none" stroke="url(#wave)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>
+  <path class="spark" d="M0 360 L120 360 L150 342 L168 372 L196 330 L214 378 L246 338 L270 366 L300 348 L640 348 L700 350 L760 349 L900 350 L1010 350 L1120 350 L1280 350"
+        fill="none" stroke="#33E7C4" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle r="3.6" fill="#9CFFEC" filter="url(#softglow)">
+    <animateMotion dur="4.4s" begin="2.6s" repeatCount="indefinite" rotate="auto">
+      <mpath xlink:href="#ftline" href="#ftline"/>
+    </animateMotion>
+  </circle>
+
+  <rect width="1280" height="400" fill="url(#vignette)"/>
+  <rect class="accent" x="0" y="396" width="1280" height="4" fill="url(#coreOn)"/>
+</svg>

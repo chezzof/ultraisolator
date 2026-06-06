@@ -1,0 +1,391 @@
+"""Crash-recovery helpers for persistent system state."""
+
+from .winapi import *
+
+
+class RecoveryMixin:
+    @staticmethod
+    def _guid_to_state(guid):
+        if guid is None:
+            return None
+        return {
+            "data1": int(guid.Data1),
+            "data2": int(guid.Data2),
+            "data3": int(guid.Data3),
+            "data4": [int(value) for value in bytes(guid.Data4)],
+        }
+
+    @staticmethod
+    def _guid_from_state(data):
+        if not isinstance(data, dict):
+            return None
+        try:
+            data4 = data.get("data4")
+            if not isinstance(data4, list) or len(data4) != 8:
+                return None
+            return GUID(
+                int(data["data1"]),
+                int(data["data2"]),
+                int(data["data3"]),
+                (ctypes.c_ubyte * 8)(*[int(value) & 0xFF for value in data4]),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def _load_recovery_state(self):
+        try:
+            if not os.path.exists(RECOVERY_STATE_PATH):
+                return {}
+            with open(RECOVERY_STATE_PATH, "r", encoding="utf-8") as handle:
+                loaded = json.load(handle)
+            if isinstance(loaded, dict):
+                return loaded
+            self._log_once(
+                ("recovery_state_invalid_type", type(loaded).__name__),
+                "[WARN] Recovery state file is invalid; leaving it in place for manual inspection.",
+            )
+            return None
+        except Exception as exc:
+            self._log_once(("recovery_state_load", type(exc).__name__), f"[WARN] Failed to load recovery state: {exc}")
+            return None
+
+    def _save_recovery_state(self, state):
+        tmp = RECOVERY_STATE_PATH + ".tmp"
+        try:
+            state["version"] = RECOVERY_STATE_VERSION
+            state["updated_at"] = time.time()
+            with open(tmp, "w", encoding="utf-8") as handle:
+                json.dump(state, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp, RECOVERY_STATE_PATH)
+            return True
+        except Exception as exc:
+            self._log_once(("recovery_state_save", type(exc).__name__), f"[WARN] Failed to save recovery state: {exc}")
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            return False
+
+    def _remove_recovery_state_file(self):
+        try:
+            os.remove(RECOVERY_STATE_PATH)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            self._log_once(("recovery_state_remove", type(exc).__name__), f"[WARN] Failed to remove recovery state: {exc}")
+
+    def _write_power_recovery_state(self, original_scheme=None, switched=None, scheme_in_use=None):
+        state = self._load_recovery_state()
+        if not isinstance(state, dict):
+            state = {}
+        if "created_at" not in state:
+            state["created_at"] = time.time()
+        power = state.get("power")
+        if not isinstance(power, dict):
+            power = {}
+        if original_scheme is not None:
+            power["original_scheme"] = self._guid_to_state(original_scheme)
+        if switched is not None:
+            power["switched"] = bool(switched)
+        if scheme_in_use is not None:
+            power["scheme_in_use"] = scheme_in_use
+        state["power"] = power
+        return self._save_recovery_state(state)
+
+    def _clear_power_recovery_state(self):
+        state = self._load_recovery_state()
+        if not isinstance(state, dict) or not state:
+            return
+        state.pop("power", None)
+        if len([key for key in state if key not in {"version", "created_at", "updated_at"}]) == 0:
+            self._remove_recovery_state_file()
+        else:
+            self._save_recovery_state(state)
+
+    def _has_persistent_recovery_state(self):
+        return os.path.exists(RECOVERY_STATE_PATH) or os.path.exists(IFEO_BACKUP_PATH)
+
+    def _recover_persistent_state(self, auto=False):
+        self._persistent_recovery_incomplete = False
+        if not self._has_persistent_recovery_state():
+            if not auto:
+                self._log("[RECOVERY] No persistent recovery state found.")
+            return True
+
+        ok = True
+        prefix = "[RECOVERY:auto]" if auto else "[RECOVERY]"
+        self._log(f"{prefix} Persistent recovery state found. Attempting restore before continuing.")
+
+        self._load_ifeo_backups()
+        if self._ifeo_original:
+            self._log(f"{prefix} Restoring IFEO registry state from backup.")
+            self._restore_ifeo_priorities()
+            if self._ifeo_original:
+                ok = False
+                self._log(f"{prefix} IFEO restore incomplete; run again as administrator.")
+
+        recovery_file_exists = os.path.exists(RECOVERY_STATE_PATH)
+        state = self._load_recovery_state()
+        if recovery_file_exists and state is None:
+            ok = False
+            self._log_once(
+                ("recovery_state_invalid_dirty",),
+                f"{prefix} Recovery state file is invalid; leaving it in place for manual inspection.",
+            )
+            state = {}
+        power = state.get("power") if isinstance(state, dict) else None
+        if isinstance(state, dict) and "power" in state and not isinstance(power, dict):
+            ok = False
+            self._log_once(
+                ("recovery_power_invalid_type", type(power).__name__),
+                f"{prefix} Power recovery state is invalid; leaving it in place for manual inspection.",
+            )
+        if isinstance(power, dict):
+            original = self._guid_from_state(power.get("original_scheme"))
+            switched = bool(power.get("switched"))
+            if switched and original is not None:
+                if self._set_power_scheme(original):
+                    self._log(f"{prefix} Restored original power scheme from recovery state.")
+                    state.pop("power", None)
+                else:
+                    ok = False
+                    self._log_once(("recovery_power_restore",), f"{prefix} Failed to restore original power scheme.")
+            elif switched:
+                ok = False
+                self._log_once(
+                    ("recovery_power_invalid",),
+                    f"{prefix} Power recovery state is invalid; leaving it in place for manual inspection.",
+                )
+            else:
+                state.pop("power", None)
+
+            if "power" in state:
+                self._save_recovery_state(state)
+            elif len([key for key in state if key not in {"version", "created_at", "updated_at"}]) == 0:
+                self._remove_recovery_state_file()
+            else:
+                self._save_recovery_state(state)
+
+        if ok and not self._has_persistent_recovery_state():
+            self._log(f"{prefix} Persistent recovery complete.")
+        elif not ok:
+            self._persistent_recovery_incomplete = True
+            self._log(f"{prefix} Persistent recovery incomplete; refusing to apply new system changes.")
+        return ok
+
+    def recover(self):
+        if not self._ensure_single_instance():
+            return False
+        try:
+            ok = self._recover_persistent_state(auto=False)
+            if ok:
+                ok = self._recover_jail_state_from_crash(auto=False)
+            return ok
+        finally:
+            self._release_single_instance()
+
+    def _load_jail_state(self):
+        try:
+            if not os.path.exists(JAIL_STATE_PATH):
+                return {}
+            with open(JAIL_STATE_PATH, "r", encoding="utf-8") as handle:
+                loaded = json.load(handle)
+            if isinstance(loaded, dict):
+                pids = loaded.get("pids")
+                if isinstance(pids, dict):
+                    return loaded
+            self._log_once(
+                ("jail_state_invalid_type", type(loaded).__name__),
+                "[WARN] Jail state file is invalid; leaving it in place for manual inspection.",
+            )
+            return None
+        except Exception as exc:
+            self._log_once(("jail_state_load", type(exc).__name__), f"[WARN] Failed to load jail state: {exc}")
+            return None
+
+    def _save_jail_state(self, state):
+        tmp = JAIL_STATE_PATH + ".tmp"
+        try:
+            state["version"] = JAIL_STATE_VERSION
+            state["updated_at"] = time.time()
+            with open(tmp, "w", encoding="utf-8") as handle:
+                json.dump(state, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp, JAIL_STATE_PATH)
+            return True
+        except Exception as exc:
+            self._log_once(("jail_state_save", type(exc).__name__), f"[WARN] Failed to save jail state: {exc}")
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            return False
+
+    def _remove_jail_state_file(self):
+        try:
+            os.remove(JAIL_STATE_PATH)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            self._log_once(("jail_state_remove", type(exc).__name__), f"[WARN] Failed to remove jail state: {exc}")
+
+    def _serialize_jail_entry(self, entry):
+        if not isinstance(entry, dict):
+            return None
+        state = entry.get("state")
+        if not isinstance(state, dict):
+            state = {}
+        return {
+            "name": entry.get("name", ""),
+            "create_time": int(entry.get("create_time", 0) or 0),
+            "source": entry.get("source", "jail"),
+            "updated_at": time.time(),
+            "state": {
+                key: value
+                for key, value in state.items()
+                if isinstance(value, (int, float, bool, list))
+            },
+        }
+
+    def _record_jail_state(self, pid):
+        self._record_jail_states([pid])
+
+    def _record_jail_states(self, pids):
+        normalized_pids = []
+        for pid in pids:
+            try:
+                normalized_pids.append(int(pid))
+            except (TypeError, ValueError):
+                continue
+        if not normalized_pids:
+            return
+        with self._state_lock:
+            entries = {
+                pid: self._serialize_jail_entry(self._touched.get(pid))
+                for pid in normalized_pids
+            }
+        entries = {
+            pid: serialized
+            for pid, serialized in entries.items()
+            if serialized and serialized.get("source") == "jail"
+        }
+        if not entries:
+            return
+        state = self._load_jail_state()
+        if state is None:
+            return
+        pids = state.setdefault("pids", {})
+        for pid, serialized in entries.items():
+            pids[str(pid)] = serialized
+        self._save_jail_state(state)
+
+    def _remove_jail_state(self, pid):
+        pid = int(pid)
+        state = self._load_jail_state()
+        if not isinstance(state, dict):
+            return
+        pids = state.get("pids")
+        if not isinstance(pids, dict):
+            return
+        if str(pid) not in pids:
+            return
+        pids.pop(str(pid), None)
+        if not pids:
+            self._remove_jail_state_file()
+        else:
+            self._save_jail_state(state)
+
+    def _recover_jail_state_from_crash(self, auto=False):
+        prefix = "[RECOVERY:jail:auto]" if auto else "[RECOVERY:jail]"
+        if not os.path.exists(JAIL_STATE_PATH):
+            return True
+        state = self._load_jail_state()
+        if state is None:
+            return False
+        pids = state.get("pids", {})
+        if not isinstance(pids, dict) or not pids:
+            self._remove_jail_state_file()
+            return True
+        self._log(f"{prefix} Restoring {len(pids)} process(es) from crash jail state.")
+        restored = 0
+        dirty = False
+        now = time.time()
+        for pid_str, saved_entry in list(pids.items()):
+            try:
+                pid = int(pid_str)
+            except (TypeError, ValueError):
+                pids.pop(pid_str, None)
+                dirty = True
+                continue
+            if not isinstance(saved_entry, dict):
+                pids.pop(pid_str, None)
+                dirty = True
+                continue
+            try:
+                updated_at = float(saved_entry.get("updated_at", state.get("updated_at", 0)) or 0)
+            except (TypeError, ValueError):
+                updated_at = 0.0
+            if not updated_at or now - updated_at >= JAIL_STATE_ENTRY_TTL_SECONDS:
+                pids.pop(pid_str, None)
+                dirty = True
+                self._log_once(
+                    ("jail_recovery_stale", pid),
+                    f"{prefix} Skipping stale jail entry for pid={pid}; recovery state is too old.",
+                )
+                continue
+            handle = self._open_process(
+                pid,
+                PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_INFORMATION | PROCESS_SET_LIMITED_INFORMATION,
+                quiet=True,
+            )
+            if not handle:
+                continue
+            try:
+                current_create_time = self._get_process_create_time(handle)
+                saved_create_time = int(saved_entry.get("create_time", 0) or 0)
+                if saved_create_time == 0 or current_create_time == 0:
+                    pids.pop(pid_str, None)
+                    dirty = True
+                    self._log_once(
+                        ("jail_recovery_create_time_unknown", pid),
+                        f"{prefix} Skipping pid={pid}; create_time is unknown, so PID reuse cannot be excluded.",
+                    )
+                    continue
+                if saved_create_time != current_create_time:
+                    pids.pop(pid_str, None)
+                    dirty = True
+                    self._log_once(
+                        ("jail_recovery_pid_reused", pid),
+                        f"{prefix} Skipping pid={pid}; create_time mismatch indicates PID reuse.",
+                    )
+                    continue
+                with self._state_lock:
+                    self._entry_gen += 1
+                    self._touched[pid] = {
+                        "name": saved_entry.get("name", ""),
+                        "create_time": saved_create_time or current_create_time,
+                        "state": dict(saved_entry.get("state", {})),
+                        "threads": {},
+                        "source": "jail",
+                        "gen": self._entry_gen,
+                    }
+            finally:
+                kernel32.CloseHandle(handle)
+            if self._restore_process(pid):
+                restored += 1
+                pids.pop(pid_str, None)
+                dirty = True
+        if dirty:
+            if pids:
+                self._save_jail_state(state)
+            else:
+                self._remove_jail_state_file()
+        remaining = self._load_jail_state()
+        if isinstance(remaining, dict) and remaining.get("pids"):
+            self._log(f"{prefix} {restored} restored; some jail entries remain for manual inspection.")
+        else:
+            self._log(f"{prefix} Crash jail recovery complete ({restored} restored).")
+        return True

@@ -1,0 +1,177 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" fill="none" role="img" aria-label="Esports Isolator PRO - Windows process tuner for competitive games">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E1216"/>
+      <stop offset="0.55" stop-color="#0A0D10"/>
+      <stop offset="1" stop-color="#060709"/>
+    </linearGradient>
+    <radialGradient id="glowTop" cx="0.5" cy="0.04" r="0.8">
+      <stop offset="0" stop-color="#00D4AA" stop-opacity="0.24"/>
+      <stop offset="0.5" stop-color="#00D4AA" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#00D4AA" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowShield" cx="0.5" cy="0.27" r="0.32">
+      <stop offset="0" stop-color="#00E6BD" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#00E6BD" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.45" r="0.9">
+      <stop offset="0.55" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.5"/>
+    </radialGradient>
+
+    <linearGradient id="shieldBody" x1="34" y1="22" x2="130" y2="152" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6BF3DA"/>
+      <stop offset="0.5" stop-color="#19D6B0"/>
+      <stop offset="1" stop-color="#009E80"/>
+    </linearGradient>
+    <linearGradient id="shieldRim" x1="34" y1="22" x2="130" y2="152" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BFFFF0" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#00B894" stop-opacity="0.2"/>
+    </linearGradient>
+    <linearGradient id="bars" x1="0" y1="78" x2="0" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#EAFFFB"/>
+      <stop offset="1" stop-color="#19D6B0"/>
+    </linearGradient>
+    <radialGradient id="shieldSpec" cx="0.32" cy="0.22" r="0.5">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="metal" x1="0" y1="270" x2="0" y2="342" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#DCEFEA"/>
+      <stop offset="1" stop-color="#8FE9D6"/>
+    </linearGradient>
+    <linearGradient id="value" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5BF0D5"/>
+      <stop offset="1" stop-color="#00C9A4"/>
+    </linearGradient>
+
+    <linearGradient id="card" x1="0" y1="436" x2="0" y2="502" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#191F25"/>
+      <stop offset="1" stop-color="#0C1014"/>
+    </linearGradient>
+    <linearGradient id="cardHi" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="coreOn" x1="0" y1="0" x2="0" y2="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7CFFE6"/>
+      <stop offset="1" stop-color="#00B894"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00D4AA" stop-opacity="0"/>
+      <stop offset="0.25" stop-color="#00D4AA" stop-opacity="0.85"/>
+      <stop offset="0.75" stop-color="#33E7C4" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#33E7C4" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="area" x1="0" y1="558" x2="0" y2="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00D4AA" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#00D4AA" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="softglow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shieldGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+
+    <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="#FFFFFF" opacity="0.025"/>
+    </pattern>
+
+    <clipPath id="shieldClip">
+      <path d="M82 22 130 48v38c0 33-19 57-48 66-29-9-48-33-48-66V48l48-26Z" transform="translate(526 58) scale(1.4)"/>
+    </clipPath>
+  </defs>
+
+  <!-- backdrop -->
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#dots)"/>
+
+  <!-- faint core lattice for tech texture; brighter cluster behind shield -->
+  <g stroke="#12181D" stroke-width="2">
+    <path d="M64 110 V520"/><path d="M128 110 V520"/><path d="M192 110 V520"/><path d="M256 110 V520"/>
+    <path d="M320 110 V520"/><path d="M384 110 V520"/><path d="M448 110 V520"/><path d="M512 110 V520"/>
+    <path d="M576 110 V520"/><path d="M640 110 V520"/><path d="M704 110 V520"/><path d="M768 110 V520"/>
+    <path d="M832 110 V520"/><path d="M896 110 V520"/><path d="M960 110 V520"/><path d="M1024 110 V520"/>
+    <path d="M1088 110 V520"/><path d="M1152 110 V520"/><path d="M1216 110 V520"/>
+  </g>
+  <g stroke="#00D4AA" stroke-width="2" opacity="0.16">
+    <path d="M576 110 V520"/><path d="M640 110 V520"/><path d="M704 110 V520"/>
+  </g>
+
+  <rect width="1280" height="640" fill="url(#glowTop)"/>
+  <rect width="1280" height="640" fill="url(#glowShield)"/>
+
+  <!-- shield -->
+  <g>
+    <g filter="url(#shieldGlow)">
+      <path d="M82 22 130 48v38c0 33-19 57-48 66-29-9-48-33-48-66V48l48-26Z" transform="translate(526 58) scale(1.4)" fill="#00E6BD" opacity="0.85"/>
+    </g>
+    <g transform="translate(526 58) scale(1.4)">
+      <path d="M82 22 130 48v38c0 33-19 57-48 66-29-9-48-33-48-66V48l48-26Z" fill="url(#shieldBody)"/>
+      <path d="M82 22 130 48v38c0 33-19 57-48 66-29-9-48-33-48-66V48l48-26Z" fill="none" stroke="url(#shieldRim)" stroke-width="1.4"/>
+      <path d="M82 48 108 62v22c0 18-9 32-26 39-17-7-26-21-26-39V62l26-14Z" fill="#0A0D10"/>
+      <path d="M68 78h8v32h-8zm10 0h8v32h-8zm10 0h8v32h-8z" fill="url(#bars)"/>
+    </g>
+    <g clip-path="url(#shieldClip)">
+      <ellipse cx="610" cy="120" rx="78" ry="66" fill="url(#shieldSpec)"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <text x="640" y="330" text-anchor="middle" fill="url(#metal)" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="74" font-weight="800" letter-spacing="2">ESPORTS ISOLATOR</text>
+
+  <!-- PRO badge + tagline -->
+  <g>
+    <rect x="497" y="356" width="128" height="48" rx="10" fill="#0D1216" stroke="url(#shieldRim)" stroke-width="1.8"/>
+    <text x="561" y="389" fill="#5BF0D5" text-anchor="middle" font-family="'JetBrains Mono', Consolas, monospace" font-size="28" font-weight="800" letter-spacing="9">PRO</text>
+    <text x="650" y="389" fill="#9AA4AB" font-family="Inter, 'Segoe UI', sans-serif" font-size="26" font-weight="500">Windows process tuner for competitive games</text>
+  </g>
+
+  <!-- stat cards, centered row -->
+  <g font-family="'JetBrains Mono', Consolas, monospace" font-weight="700">
+    <g>
+      <rect x="248" y="436" width="184" height="66" rx="13" fill="url(#card)" stroke="#262E35" stroke-width="1.25"/>
+      <rect x="261" y="437.5" width="158" height="1.5" fill="url(#cardHi)"/>
+      <text x="268" y="480" fill="url(#value)" font-size="27">+9.8%</text>
+      <text x="268" y="500" fill="#7C868D" font-size="12.5" letter-spacing="1.6">AVG FPS</text>
+    </g>
+    <g>
+      <rect x="448" y="436" width="184" height="66" rx="13" fill="url(#card)" stroke="#262E35" stroke-width="1.25"/>
+      <rect x="461" y="437.5" width="158" height="1.5" fill="url(#cardHi)"/>
+      <text x="468" y="480" fill="url(#value)" font-size="27">&#8722;26%</text>
+      <text x="468" y="500" fill="#7C868D" font-size="12.5" letter-spacing="1.6">P95 SPIKE</text>
+    </g>
+    <g>
+      <rect x="648" y="436" width="184" height="66" rx="13" fill="url(#card)" stroke="#262E35" stroke-width="1.25"/>
+      <rect x="661" y="437.5" width="158" height="1.5" fill="url(#cardHi)"/>
+      <text x="668" y="480" fill="#EEF1F3" font-size="27">126</text>
+      <text x="668" y="500" fill="#7C868D" font-size="12.5" letter-spacing="1.6">PROCS JAILED</text>
+    </g>
+    <g>
+      <rect x="848" y="436" width="184" height="66" rx="13" fill="url(#card)" stroke="#262E35" stroke-width="1.25"/>
+      <rect x="861" y="437.5" width="158" height="1.5" fill="url(#cardHi)"/>
+      <text x="868" y="480" fill="#EEF1F3" font-size="27">0</text>
+      <text x="868" y="500" fill="#7C868D" font-size="12.5" letter-spacing="1.6">RESTORE FAILS</text>
+    </g>
+  </g>
+
+  <!-- footer tags -->
+  <text x="640" y="556" text-anchor="middle" fill="#AEB6BD" font-family="'JetBrains Mono', Consolas, monospace" font-size="16" letter-spacing="2.5">WINDOWS 10/11 &#183; PYTHON &#183; ELECTRON &#183; MIT</text>
+
+  <!-- frame-time graph: area fill + line -->
+  <path d="M0 598 L150 598 L182 574 L206 612 L238 560 L262 618 L300 568 L332 602 L372 580 L760 580 L820 582 L900 581 L1010 582 L1120 581 L1280 582 L1280 640 L0 640 Z"
+        fill="url(#area)"/>
+  <path d="M0 598 L150 598 L182 574 L206 612 L238 560 L262 618 L300 568 L332 602 L372 580 L760 580 L820 582 L900 581 L1010 582 L1120 581 L1280 582"
+        fill="none" stroke="url(#wave)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>
+
+  <rect width="1280" height="640" fill="url(#vignette)"/>
+  <rect x="0" y="0" width="1280" height="4" fill="url(#coreOn)" opacity="0.9"/>
+  <rect x="0" y="636" width="1280" height="4" fill="url(#coreOn)" opacity="0.9"/>
+</svg>

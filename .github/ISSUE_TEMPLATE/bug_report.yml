@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a problem with Esports Isolator PRO
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill out the
+        details below so we can reproduce and fix the issue quickly.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I launch a game, the background processes are not restored after exit...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Edit config.json with games: ["cs2.exe"]
+        2. Run `python best_isolator.py`
+        3. Launch CS2, then exit
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 23H2 (build 22631)"
+    validations:
+      required: true
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "3.12.4"
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      placeholder: "Counter-Strike 2"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Run with `--log-file isolator-run.log` and paste the relevant portion. Do NOT paste a config.json that contains private paths.
+      render: shell
+  - type: checkboxes
+    id: admin
+    attributes:
+      label: Confirmation
+      options:
+        - label: I ran the tool as Administrator
+        - label: I am not pasting any private/sensitive information
+          required: true

@@ -1,0 +1,422 @@
+import http.client
+import contextlib
+import io
+import json
+import threading
+import unittest
+from pathlib import Path
+
+from isolator.app import EsportsIsolatorPro
+from server.__main__ import _parent_heartbeat_loop
+from server.bridge import BridgeConflict, IsolatorBridge
+from server.http_api import create_handler, create_server
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class RuntimeStatusSnapshotTests(unittest.TestCase):
+    def test_runtime_status_is_readonly_and_does_not_enumerate_processes(self):
+        isolator = EsportsIsolatorPro(
+            config_path="__no_local_config__.json",
+            scan_game_libraries=False,
+        )
+        isolator._get_processes = lambda: (_ for _ in ()).throw(AssertionError("_get_processes must not run"))
+
+        with isolator._state_lock:
+            isolator._entry_gen += 1
+            isolator._touched[42] = {
+                "name": "cs2.exe",
+                "create_time": 123,
+                "state": {},
+                "threads": {},
+                "source": "optimize_game",
+                "gen": isolator._entry_gen,
+            }
+            isolator._entry_gen += 1
+            isolator._touched[77] = {
+                "name": "discord.exe",
+                "create_time": 456,
+                "state": {},
+                "threads": {},
+                "source": "jail",
+                "gen": isolator._entry_gen,
+            }
+            isolator._active_mutations = 2
+
+        status = isolator.get_runtime_status()
+
+        self.assertTrue(status["game_mode"])
+        self.assertEqual([42], status["active_game_pids"])
+        self.assertEqual(2, status["tracked_process_count"])
+        self.assertEqual(1, status["jailed_process_count"])
+        self.assertEqual(2, status["active_mutations"])
+        self.assertFalse(status["running"])
+
+    def test_live_snapshot_uses_tracked_processes_without_enumerating_processes(self):
+        isolator = EsportsIsolatorPro(
+            config_path="__no_local_config__.json",
+            scan_game_libraries=False,
+        )
+        isolator._get_processes = lambda: (_ for _ in ()).throw(AssertionError("_get_processes must not run"))
+
+        with isolator._state_lock:
+            isolator._entry_gen += 1
+            isolator._touched[42] = {
+                "name": "cs2.exe",
+                "create_time": 123,
+                "state": {
+                    "priority_class": 128,
+                    "cpu_set_ids": [4, 5, 6, 7],
+                    "io_priority": 2,
+                    "page_priority": 5,
+                    "priority_boost_disabled": True,
+                },
+                "threads": {1001: {}},
+                "source": "optimize_game",
+                "gen": isolator._entry_gen,
+            }
+            isolator._entry_gen += 1
+            isolator._touched[77] = {
+                "name": "discord.exe",
+                "create_time": 456,
+                "state": {},
+                "threads": {},
+                "source": "jail",
+                "gen": isolator._entry_gen,
+            }
+
+        snapshot = isolator.get_live_snapshot()
+
+        self.assertEqual("tracked_only", snapshot["process_mode"])
+        self.assertTrue(snapshot["status"]["game_mode"])
+        self.assertEqual(2, snapshot["process_count"])
+        by_pid = {process["pid"]: process for process in snapshot["processes"]}
+        self.assertEqual("game", by_pid[42]["status"])
+        self.assertTrue(by_pid[42]["game"])
+        self.assertEqual(1, by_pid[42]["thread_count"])
+        self.assertEqual(128, by_pid[42]["priority_class"])
+        self.assertEqual([4, 5, 6, 7], by_pid[42]["cpu_set_ids"])
+        self.assertEqual(2, by_pid[42]["io_priority"])
+        self.assertEqual(5, by_pid[42]["page_priority"])
+        self.assertTrue(by_pid[42]["priority_boost_disabled"])
+        self.assertEqual("jailed", by_pid[77]["status"])
+        self.assertFalse(by_pid[77]["protected"])
+
+
+class ParentHeartbeatTests(unittest.TestCase):
+    def test_parent_heartbeat_requests_shutdown_when_parent_exits(self):
+        stop_event = threading.Event()
+        shutdown_requested = []
+        checks = []
+
+        def fake_parent_alive(parent_pid, _interval_s):
+            checks.append(parent_pid)
+            return False
+
+        _parent_heartbeat_loop(
+            1234,
+            stop_event,
+            lambda: shutdown_requested.append(True),
+            interval_s=0.001,
+            is_parent_alive=fake_parent_alive,
+        )
+
+        self.assertEqual([1234], checks)
+        self.assertEqual([True], shutdown_requested)
+        self.assertTrue(stop_event.is_set())
+
+
+class FakeEngine:
+    def __init__(self, run_result=True, recover_result=True):
+        self.run_result = run_result
+        self.recover_result = recover_result
+        self.run_calls = 0
+        self.shutdown_calls = 0
+        self.recover_calls = 0
+        self.running = False
+        self.game_mode = False
+
+    def run(self):
+        self.run_calls += 1
+        self.running = bool(self.run_result)
+        return self.run_result
+
+    def shutdown(self):
+        self.shutdown_calls += 1
+        self.running = False
+
+    def recover(self):
+        self.recover_calls += 1
+        return self.recover_result
+
+    def get_runtime_status(self):
+        return {
+            "running": self.running,
+            "game_mode": self.game_mode,
+            "active_game_pids": [123] if self.game_mode else [],
+        }
+
+    def get_live_snapshot(self):
+        return {
+            "status": self.get_runtime_status(),
+            "process_mode": "tracked_only",
+            "processes": [],
+            "process_count": 0,
+        }
+
+
+class BridgeLifecycleTests(unittest.TestCase):
+    def test_start_stop_status_use_single_engine_instance(self):
+        created = []
+
+        def factory(config_path, scan_game_libraries):
+            engine = FakeEngine()
+            created.append((config_path, scan_game_libraries, engine))
+            return engine
+
+        bridge = IsolatorBridge(config_path="config.json", engine_factory=factory)
+
+        start = bridge.start()
+        second_start = bridge.start()
+        status = bridge.status()
+        stop = bridge.stop()
+
+        self.assertTrue(start["ok"])
+        self.assertTrue(second_start["already_running"])
+        self.assertTrue(status["running"])
+        self.assertFalse(stop["status"]["running"])
+        self.assertEqual(1, len(created))
+        self.assertEqual(("config.json", True), created[0][:2])
+        self.assertEqual(1, created[0][2].run_calls)
+        self.assertEqual(1, created[0][2].shutdown_calls)
+
+    def test_recover_uses_short_lived_engine_and_is_blocked_while_running(self):
+        created = []
+
+        def factory(config_path, scan_game_libraries):
+            engine = FakeEngine()
+            created.append((config_path, scan_game_libraries, engine))
+            return engine
+
+        bridge = IsolatorBridge(config_path="custom.json", engine_factory=factory)
+
+        recover = bridge.recover()
+        bridge.start()
+
+        with self.assertRaises(BridgeConflict):
+            bridge.recover()
+
+        self.assertTrue(recover["ok"])
+        self.assertEqual(("custom.json", False), created[0][:2])
+        self.assertEqual(1, created[0][2].recover_calls)
+
+    def test_live_snapshot_tracks_connected_clients(self):
+        bridge = IsolatorBridge(engine_factory=lambda *_args: FakeEngine())
+
+        self.assertEqual(0, bridge.live_client_count())
+
+        with bridge.live_client():
+            snapshot = bridge.live_snapshot()
+            self.assertEqual(1, bridge.live_client_count())
+
+        self.assertEqual(0, bridge.live_client_count())
+        self.assertEqual(1, snapshot["api"]["live_clients"])
+        self.assertTrue(snapshot["api"]["lazy_push"])
+
+
+class HttpApiTests(unittest.TestCase):
+    def test_status_endpoint_returns_json_and_dev_cors(self):
+        bridge = IsolatorBridge(engine_factory=lambda *_args: FakeEngine())
+        server = create_server(("127.0.0.1", 0), create_handler(bridge))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        conn = None
+        try:
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+            conn.request("GET", "/api/status", headers={"Origin": "http://localhost:5173"})
+            response = conn.getresponse()
+            body = json.loads(response.read().decode("utf-8"))
+        finally:
+            if conn is not None:
+                conn.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(200, response.status)
+        self.assertEqual("application/json", response.getheader("Content-Type"))
+        self.assertEqual("http://localhost:5173", response.getheader("Access-Control-Allow-Origin"))
+        self.assertFalse(body["running"])
+        self.assertEqual("idle", body["api"]["live_updates"])
+
+    def test_live_endpoint_is_lazy_and_streams_one_sse_snapshot(self):
+        class CountingBridge(IsolatorBridge):
+            def __init__(self):
+                super().__init__(engine_factory=lambda *_args: FakeEngine())
+                self.snapshot_calls = 0
+
+            def live_snapshot(self):
+                self.snapshot_calls += 1
+                snapshot = super().live_snapshot()
+                snapshot["test_sequence"] = self.snapshot_calls
+                return snapshot
+
+        bridge = CountingBridge()
+        server = create_server(("127.0.0.1", 0), create_handler(bridge))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        conn = None
+        try:
+            self.assertEqual(0, bridge.snapshot_calls)
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+            conn.request("GET", "/api/live?once=1", headers={"Origin": "http://localhost:5173"})
+            response = conn.getresponse()
+            body = response.read().decode("utf-8")
+        finally:
+            if conn is not None:
+                conn.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(200, response.status)
+        self.assertEqual("text/event-stream", response.getheader("Content-Type"))
+        self.assertIn("event: snapshot\n", body)
+        self.assertIn('"test_sequence":1', body)
+        self.assertEqual(1, bridge.snapshot_calls)
+        self.assertEqual(0, bridge.live_client_count())
+
+    def test_live_endpoint_treats_connection_aborted_as_client_disconnect(self):
+        bridge = IsolatorBridge(engine_factory=lambda *_args: FakeEngine())
+        handler_class = create_handler(bridge)
+
+        def aborting_write(_handler, _event_name, _payload):
+            raise ConnectionAbortedError("client closed")
+
+        handler_class._write_sse_event = aborting_write
+        server = create_server(("127.0.0.1", 0), handler_class)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        stderr = io.StringIO()
+        conn = None
+        with contextlib.redirect_stderr(stderr):
+            thread.start()
+            try:
+                conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+                conn.request("GET", "/api/live?once=1")
+                response = conn.getresponse()
+                response.read()
+            finally:
+                if conn is not None:
+                    conn.close()
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+        self.assertEqual(200, response.status)
+        self.assertEqual(0, bridge.live_client_count())
+        self.assertNotIn("ConnectionAbortedError", stderr.getvalue())
+
+    def test_live_stream_uses_cancellable_wait_instead_of_sleep(self):
+        source = (ROOT / "server" / "http_api.py").read_text(encoding="utf-8")
+
+        self.assertIn("threading.Event", source)
+        self.assertIn(".wait(bridge.live_interval_seconds(snapshot))", source)
+        self.assertNotIn("time.sleep", source)
+
+    def test_token_protects_config_logs_and_lifecycle_routes(self):
+        bridge = IsolatorBridge(engine_factory=lambda *_args: FakeEngine())
+        server = create_server(("127.0.0.1", 0), create_handler(bridge, api_token="secret-token"))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            unauthorized_routes = [
+                ("GET", "/api/status", None),
+                ("GET", "/api/config", None),
+                ("GET", "/api/config/defaults", None),
+                ("GET", "/api/logs", None),
+                ("POST", "/api/start", b""),
+                ("POST", "/api/stop", b""),
+                ("POST", "/api/recover", b""),
+                ("PUT", "/api/config", b"{}"),
+            ]
+            unauthorized = []
+            for method, path, body in unauthorized_routes:
+                conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+                conn.request(method, path, body=body)
+                response = conn.getresponse()
+                payload = json.loads(response.read().decode("utf-8"))
+                unauthorized.append((response.status, payload["error"]))
+                conn.close()
+
+            authorized = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+            authorized.request("GET", "/api/status", headers={"Authorization": "Bearer secret-token"})
+            ok_response = authorized.getresponse()
+            ok_body = json.loads(ok_response.read().decode("utf-8"))
+            authorized.close()
+
+            header_token = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+            header_token.request("GET", "/api/status", headers={"X-Isolator-Token": "secret-token"})
+            header_response = header_token.getresponse()
+            header_response.read()
+            header_token.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertTrue(all(status == 401 and error == "unauthorized" for status, error in unauthorized))
+        self.assertEqual(200, ok_response.status)
+        self.assertEqual(200, header_response.status)
+        self.assertFalse(ok_body["running"])
+
+    def test_malformed_origin_is_rejected_without_crashing(self):
+        bridge = IsolatorBridge(engine_factory=lambda *_args: FakeEngine())
+        server = create_server(("127.0.0.1", 0), create_handler(bridge, api_token="secret-token"))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+        try:
+            conn.request("GET", "/api/status", headers={"Origin": "http://[::1", "Authorization": "Bearer secret-token"})
+            response = conn.getresponse()
+            payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            conn.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(403, response.status)
+        self.assertEqual("forbidden_origin", payload["error"])
+
+    def test_cross_origin_post_is_rejected_before_large_body_is_read(self):
+        bridge = IsolatorBridge(engine_factory=lambda *_args: FakeEngine())
+        server = create_server(("127.0.0.1", 0), create_handler(bridge, api_token="secret-token"))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+        try:
+            conn.request(
+                "POST",
+                "/api/start",
+                body=None,
+                headers={
+                    "Origin": "https://attacker.example",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Content-Length": str(70 * 1024),
+                },
+            )
+            response = conn.getresponse()
+            payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            conn.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual(403, response.status)
+        self.assertEqual("forbidden_origin", payload["error"])
+
+
+if __name__ == "__main__":
+    unittest.main()

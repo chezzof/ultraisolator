@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="160" viewBox="0 0 640 160" role="img" aria-label="Esports Isolator PRO">
+  <rect width="640" height="160" fill="#0A0A0A"/>
+  <path d="M82 22 130 48v38c0 33-19 57-48 66-29-9-48-33-48-66V48l48-26Z" fill="#00D4AA"/>
+  <path d="M82 48 108 62v22c0 18-9 32-26 39-17-7-26-21-26-39V62l26-14Z" fill="#0A0A0A"/>
+  <path d="M68 78h8v32h-8zm10 0h8v32h-8zm10 0h8v32h-8z" fill="#00D4AA"/>
+  <text x="164" y="79" fill="#E8E8EC" font-family="Inter, Segoe UI, sans-serif" font-size="30" font-weight="700" letter-spacing="2">ESPORTS ISOLATOR</text>
+  <text x="164" y="112" fill="#00D4AA" font-family="JetBrains Mono, Consolas, monospace" font-size="24" font-weight="700" letter-spacing="6">PRO</text>
+</svg>

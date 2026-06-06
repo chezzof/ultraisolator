@@ -1,0 +1,472 @@
+import json
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+UI = ROOT / "ui"
+SRC = UI / "src"
+
+
+class ReactFrontendContractTests(unittest.TestCase):
+    def test_vite_react_entrypoints_exist(self):
+        self.assertTrue((UI / "index.html").exists())
+        self.assertTrue((SRC / "main.jsx").exists())
+        self.assertTrue((SRC / "App.jsx").exists())
+        self.assertTrue((SRC / "styles.css").exists())
+
+    def test_package_declares_carbon_renderer_stack(self):
+        package = json.loads((UI / "package.json").read_text(encoding="utf-8"))
+
+        self.assertIn("@carbon/react", package["dependencies"])
+        self.assertIn("@carbon/icons-react", package["dependencies"])
+        self.assertIn("sass", package["devDependencies"])
+        for group_name in ("dependencies", "devDependencies"):
+            for name, version in package[group_name].items():
+                self.assertNotRegex(version, r"^[~^>=<*]", f"{name} should be pinned")
+
+    def test_layout_has_sidebar_navigation_and_three_placeholder_pages(self):
+        app = (SRC / "App.jsx").read_text(encoding="utf-8")
+
+        self.assertIn("Dashboard", app)
+        self.assertIn("Settings", app)
+        self.assertIn("Topology", app)
+        self.assertIn("SideNav", app)
+        self.assertIn("useLiveSnapshot", app)
+        self.assertIn("placeholder", app.lower())
+
+    def test_renderer_is_split_into_pages_components_constants_and_utils(self):
+        expected_files = (
+            "constants/navigation.js",
+            "constants/processes.js",
+            "constants/settings.js",
+            "constants/topology.js",
+            "components/ErrorBoundary.jsx",
+            "components/KpiCell.jsx",
+            "components/PageHeading.jsx",
+            "components/StatusTag.jsx",
+            "pages/Dashboard.jsx",
+            "pages/Placeholder.jsx",
+            "pages/Settings.jsx",
+            "pages/Topology.jsx",
+            "utils/appSettings.js",
+            "utils/config.js",
+            "utils/format.js",
+            "utils/lifecycle.js",
+            "utils/topology.js",
+        )
+        for relative_path in expected_files:
+            with self.subTest(path=relative_path):
+                self.assertTrue((SRC / relative_path).exists(), f"{relative_path} is missing")
+
+        app = (SRC / "App.jsx").read_text(encoding="utf-8")
+        self.assertLess(len(app.splitlines()), 180)
+        for component_name in ("DashboardPage", "SettingsPage", "TopologyPage", "ProcessTable", "ConfigField"):
+            self.assertNotIn(f"function {component_name}", app)
+        self.assertIn("from './pages/Dashboard.jsx'", app)
+        self.assertIn("from './pages/Settings.jsx'", app)
+        self.assertIn("from './pages/Topology.jsx'", app)
+        self.assertIn("from './components/ErrorBoundary.jsx'", app)
+
+    def test_dashboard_has_live_kpi_status_panel_and_quick_actions(self):
+        dashboard = (SRC / "pages" / "Dashboard.jsx").read_text(encoding="utf-8")
+        lifecycle = (SRC / "utils" / "lifecycle.js").read_text(encoding="utf-8")
+
+        self.assertIn("function DashboardPage", dashboard)
+        self.assertIn("dashboard-status-panel", dashboard)
+        self.assertIn("Game Mode", dashboard)
+        self.assertIn("Admin", dashboard)
+        self.assertIn("Power Plan", dashboard)
+        self.assertIn("Timer", dashboard)
+        self.assertIn("CPU Partitions", dashboard)
+        self.assertIn("Capability Notes", dashboard)
+        self.assertIn("Start", dashboard)
+        self.assertIn("Stop", dashboard)
+        self.assertIn("Restore", dashboard)
+        self.assertIn("postLifecycleAction", dashboard)
+        self.assertIn("requestJson", lifecycle)
+        self.assertNotIn("CPU/RAM", dashboard)
+
+    def test_dashboard_has_process_table_filters_and_columns(self):
+        table = (SRC / "components" / "ProcessTable.jsx").read_text(encoding="utf-8")
+        process_constants = (SRC / "constants" / "processes.js").read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("function ProcessTable", table)
+        self.assertIn("process-filter-bar", table)
+        self.assertIn("Search PID, name, source", table)
+        for label in ("All", "Jailed", "Game", "Protected"):
+            self.assertIn(label, table + process_constants)
+        for column in ("PID", "Name", "Priority", "CPU Sets", "Status"):
+            self.assertIn(column, table)
+        self.assertIn("useMemo", table)
+        self.assertIn(".process-table", styles)
+        self.assertIn(".status-badge", styles)
+        self.assertNotIn("setInterval", table)
+
+    def test_settings_has_config_editor_and_app_settings(self):
+        settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
+        settings_constants = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
+        app_settings = (SRC / "utils" / "appSettings.js").read_text(encoding="utf-8")
+        config_utils = (SRC / "utils" / "config.js").read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("function SettingsPage", settings)
+        self.assertIn("/api/config/defaults", settings)
+        self.assertIn("/api/config", settings)
+        self.assertIn("validateConfigDraft", settings)
+        for section in ("Game Detection", "Jailing", "Timing", "Protection", "Advanced", "Application"):
+            self.assertIn(section, settings + settings_constants)
+        for field in (
+            "games",
+            "auto_detect_steam_games",
+            "auto_detect_epic_games",
+            "steam_library_paths",
+            "epic_library_paths",
+            "enable_background_jailing",
+            "maintenance_jail_batch_size",
+            "maintenance_jail_interval_ms",
+            "maintenance_jail_batch_cooldown_ms",
+            "maintenance_skip_after_quiet_cycles",
+            "poll_interval_active_ms",
+            "poll_interval_idle_ms",
+            "housekeeping_cores",
+            "disable_power_scheme_switch",
+            "disable_timer_resolution_tweak",
+            "disable_game_priority_boost",
+            "game_close_debounce_s",
+            "game_exit_restore_delay_s",
+            "gc_full_collect_interval_s",
+            "anti_cheat_mode",
+            "protected_extra",
+            "log_file",
+            "enable_hot_thread_tuning",
+            "hot_thread_refresh_ms",
+            "event_backend",
+            "allow_mmcss_injection",
+        ):
+            self.assertIn(field, settings + settings_constants)
+        for label in (
+            "Launch at Windows startup",
+            "Minimize to tray on start",
+            "Start isolator automatically",
+            "Save",
+            "Reset",
+            "Reload",
+        ):
+            self.assertIn(label, settings)
+        self.assertIn("window.isolator?.getAppSettings", app_settings)
+        self.assertIn("window.isolator?.updateAppSettings", app_settings)
+        self.assertIn("validateConfigDraft", config_utils)
+        self.assertIn(".settings-grid", styles)
+        self.assertIn(".settings-field", styles)
+        self.assertIn(".toggle-row", styles)
+
+    def test_settings_has_per_app_profiles_crud_editor(self):
+        settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
+        config_utils = (SRC / "utils" / "config.js").read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("Per-App Profiles", settings)
+        self.assertIn("addProfile", settings)
+        self.assertIn("removeProfile", settings)
+        self.assertIn("updateProfile", settings)
+        self.assertIn("Profile executable", settings)
+        for label in ("Treat as game", "Never jail", "Always jail", "Priority"):
+            self.assertIn(label, settings)
+        self.assertIn("app_profiles", settings + config_utils)
+        self.assertIn("validateAppProfilesDraft", config_utils)
+        self.assertIn(".profiles-editor", styles)
+
+    def test_first_run_wizard_applies_presets_and_tracks_completion(self):
+        app = (SRC / "App.jsx").read_text(encoding="utf-8")
+        constants = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
+        app_settings = (SRC / "utils" / "appSettings.js").read_text(encoding="utf-8")
+        wizard_path = SRC / "components" / "FirstRunWizard.jsx"
+        self.assertTrue(wizard_path.exists())
+        wizard = wizard_path.read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("FirstRunWizard", app)
+        self.assertIn("firstRunCompleted", constants + app_settings + wizard)
+        self.assertIn("CONFIG_PRESETS", constants)
+        for label in ("Competitive", "Casual", "Streaming"):
+            self.assertIn(label, constants + wizard)
+        self.assertIn("/api/config", wizard)
+        self.assertIn("saveAppSettings", wizard)
+        self.assertIn("first-run-overlay", wizard)
+        self.assertIn(".first-run-overlay", styles)
+
+    def test_settings_can_apply_config_presets_after_first_run(self):
+        settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
+        constants = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
+
+        self.assertIn("Config Presets", settings)
+        self.assertIn("applyPresetToDraft", settings)
+        self.assertIn("CONFIG_PRESETS", settings + constants)
+        for label in ("Competitive", "Casual", "Streaming"):
+            self.assertIn(label, settings + constants)
+
+    def test_settings_reset_requires_confirmation(self):
+        settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
+        reset_body = settings[settings.index("const resetToDefaults = () => {"):settings.index("const saveSettings = async")]
+
+        self.assertIn("window.confirm", reset_body)
+        self.assertLess(reset_body.index("window.confirm"), reset_body.index("setDraft("))
+
+    def test_topology_has_cpu_map_summary_and_core_details(self):
+        topology = (SRC / "pages" / "Topology.jsx").read_text(encoding="utf-8")
+        topology_utils = (SRC / "utils" / "topology.js").read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("function TopologyPage", topology)
+        self.assertIn("/api/topology", topology)
+        self.assertIn("refresh=1", topology)
+        self.assertIn("groupCoresByLlc", topology)
+        self.assertIn("function groupCoresByLlc", topology_utils)
+        self.assertIn("selectedCore", topology)
+        for label in ("CPU Map", "Total Cores", "Game", "Background", "Housekeeping", "LLC", "P-core", "E-core", "Parked"):
+            self.assertIn(label, topology)
+        self.assertIn("partition-game", topology)
+        self.assertIn("partition-background", topology)
+        self.assertIn("partition-housekeeping", topology)
+        self.assertIn("core-tile", topology)
+        self.assertIn(".topology-map", styles)
+        self.assertIn(".llc-group", styles)
+        self.assertIn(".core-tile", styles)
+        self.assertIn(".core-detail-panel", styles)
+
+    def test_logs_page_has_log_viewer_filters_and_game_mode_pause(self):
+        app = (SRC / "App.jsx").read_text(encoding="utf-8")
+        navigation = (SRC / "constants" / "navigation.js").read_text(encoding="utf-8")
+        logs_path = SRC / "pages" / "Logs.jsx"
+        self.assertTrue(logs_path.exists())
+        logs = logs_path.read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("LogsPage", app)
+        self.assertIn("from './pages/Logs.jsx'", app)
+        self.assertIn("Logs", navigation)
+        self.assertIn("/api/logs", logs)
+        self.assertIn("setInterval", logs)
+        self.assertIn("game_mode", logs)
+        self.assertIn("Log refresh paused during game mode", logs)
+        self.assertIn("Search logs", logs)
+        self.assertIn("All categories", logs)
+        for label in ("All", "INFO", "WARN", "ERROR"):
+            self.assertIn(label, logs)
+        self.assertIn(".logs-page", styles)
+        self.assertIn(".log-table", styles)
+
+    def test_advanced_tools_has_readonly_msi_viewer(self):
+        app = (SRC / "App.jsx").read_text(encoding="utf-8")
+        navigation = (SRC / "constants" / "navigation.js").read_text(encoding="utf-8")
+        tools_path = SRC / "pages" / "AdvancedTools.jsx"
+        self.assertTrue(tools_path.exists())
+        tools = tools_path.read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("AdvancedToolsPage", app)
+        self.assertIn("Advanced Tools", navigation)
+        self.assertIn("Message Signaled Interrupts", tools)
+        self.assertIn("/api/msi", tools)
+        self.assertIn("readonly", tools.lower())
+        self.assertIn("Restart required", tools)
+        self.assertIn("paused during game mode", tools)
+        self.assertIn("msi-table", tools)
+        self.assertIn(".advanced-tools-page", styles)
+        self.assertIn(".msi-table", styles)
+
+    def test_app_has_memory_only_notification_toasts_and_history_drawer(self):
+        app = (SRC / "App.jsx").read_text(encoding="utf-8")
+        hook_path = SRC / "hooks" / "useLiveSnapshot.js"
+        center_path = SRC / "components" / "NotificationCenter.jsx"
+        self.assertTrue(center_path.exists())
+        hook = hook_path.read_text(encoding="utf-8")
+        center = center_path.read_text(encoding="utf-8")
+        settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
+        app_settings = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("NotificationCenter", app)
+        self.assertIn("eventName === 'notification'", hook)
+        self.assertIn("malformed notification frame", hook)
+        self.assertIn("notifications", hook)
+        self.assertIn("notification-history-drawer", center)
+        self.assertIn("notification-toast-stack", center)
+        self.assertIn("suppress_in_game_mode", center)
+        self.assertIn("Notifications", settings)
+        self.assertIn("Show notification toasts", settings)
+        self.assertIn("notificationToastsEnabled", app_settings)
+        self.assertIn(".notification-toast-stack", styles)
+        self.assertIn(".notification-history-drawer", styles)
+
+    def test_dashboard_has_system_analysis_widget(self):
+        app = (SRC / "App.jsx").read_text(encoding="utf-8")
+        dashboard = (SRC / "pages" / "Dashboard.jsx").read_text(encoding="utf-8")
+        analysis_path = SRC / "components" / "SystemAnalysis.jsx"
+        self.assertTrue(analysis_path.exists())
+        analysis = analysis_path.read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("SystemAnalysis", app)
+        self.assertIn("from './components/SystemAnalysis.jsx'", app)
+        self.assertIn("Analysis", dashboard)
+        self.assertIn("/api/analysis", analysis)
+        self.assertIn("Optimization Score", analysis)
+        self.assertIn("Boost Potential", analysis)
+        self.assertIn("CPU isolation", analysis)
+        self.assertIn("GPU bottleneck", analysis)
+        self.assertIn("game_mode", analysis)
+        self.assertIn("paused", analysis)
+        self.assertIn(".analysis-panel", styles)
+        self.assertIn(".analysis-score", styles)
+
+    def test_dashboard_has_game_readiness_checklist_widget(self):
+        dashboard = (SRC / "pages" / "Dashboard.jsx").read_text(encoding="utf-8")
+        readiness_path = SRC / "components" / "ReadinessChecklist.jsx"
+        self.assertTrue(readiness_path.exists())
+        readiness = readiness_path.read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("ReadinessChecklist", dashboard)
+        self.assertIn("/api/readiness", readiness)
+        self.assertIn("Game Readiness", readiness)
+        self.assertIn("paused during game mode", readiness)
+        for label in ("Power plan", "Timer resolution", "Background jailing", "IFEO priority"):
+            self.assertIn(label, readiness)
+        self.assertIn(".readiness-panel", styles)
+        self.assertIn(".readiness-check", styles)
+
+    def test_app_wraps_main_content_in_error_boundary(self):
+        app = (SRC / "App.jsx").read_text(encoding="utf-8")
+        boundary = (SRC / "components" / "ErrorBoundary.jsx").read_text(encoding="utf-8")
+
+        self.assertIn("class ErrorBoundary", boundary)
+        self.assertIn("componentDidCatch", boundary)
+        self.assertIn("Something went wrong", boundary)
+        self.assertIn("window.location.reload()", boundary)
+        self.assertIn("<ErrorBoundary>", app)
+        self.assertIn("</ErrorBoundary>", app)
+
+    def test_live_hook_uses_lazy_sse_only_when_visible(self):
+        hook = (SRC / "hooks" / "useLiveSnapshot.js").read_text(encoding="utf-8")
+
+        self.assertIn("fetch(`${backendUrl}/api/live`", hook)
+        self.assertIn("Authorization: `Bearer ${backendToken}`", hook)
+        self.assertIn("parseSseFrame", hook)
+        self.assertIn("/api/live", hook)
+        self.assertIn("document.visibilityState === 'visible'", hook)
+        self.assertIn("visibilitychange", hook)
+        self.assertIn("resolveBackendUrl", hook)
+        self.assertIn("window.isolator.reportStatus", hook)
+        self.assertNotIn("setInterval", hook)
+        self.assertNotIn("/api/status", hook)
+
+    def test_config_validation_rejects_blank_numeric_fields(self):
+        config_utils = (SRC / "utils" / "config.js").read_text(encoding="utf-8")
+
+        self.assertIn("is required", config_utils)
+        self.assertIn("if (!text)", config_utils)
+        self.assertNotIn("Number(String(value).trim())", config_utils)
+
+    def test_backend_url_resolution_has_single_source_of_truth(self):
+        app = (SRC / "App.jsx").read_text(encoding="utf-8")
+        hook = (SRC / "hooks" / "useLiveSnapshot.js").read_text(encoding="utf-8")
+        settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
+        topology = (SRC / "pages" / "Topology.jsx").read_text(encoding="utf-8")
+        api_path = SRC / "utils" / "api.js"
+        self.assertTrue(api_path.exists())
+        api = api_path.read_text(encoding="utf-8")
+
+        self.assertIn("export async function resolveBackendUrl", api)
+        self.assertIn("window.isolator?.getBackendUrl", api)
+        self.assertIn("export async function requestJson", api)
+        self.assertIn("response.text()", api)
+        self.assertIn("returned non-JSON response", api)
+        self.assertNotIn("async function resolveBackendUrl", app)
+        self.assertNotIn("async function resolveBackendUrl", hook)
+        self.assertIn("from '../utils/api.js'", hook)
+        self.assertIn("from '../utils/api.js'", settings)
+        self.assertIn("from '../utils/api.js'", topology)
+
+    def test_english_analysis_points_are_not_russian(self):
+        i18n = (SRC / "i18n.jsx").read_text(encoding="utf-8")
+        english_block = i18n[:i18n.index("  ru: {")]
+
+        self.assertIn("'analysis.points': '{{points}} points'", english_block)
+        self.assertNotIn("очков", english_block)
+
+    def test_styles_reuse_benchmark_hud_tokens(self):
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        for token in ("#00D4AA", "#0A0A0A", "#111316", "#1E2328", "JetBrains Mono", "Inter"):
+            self.assertIn(token, styles)
+        self.assertIn("--eii-accent", styles)
+        self.assertIn("Open-source clean pass", styles)
+        self.assertIn(".kpi-cell", styles)
+        self.assertIn("grid-template-columns: repeat(3", styles)
+
+    def test_public_text_has_no_mojibake_artifacts(self):
+        checked_files = (
+            ROOT / "README.md",
+            ROOT / "BUILDING.md",
+            ROOT / "CONTRIBUTING.md",
+            ROOT / "SECURITY.md",
+            SRC / "i18n.jsx",
+        )
+        mojibake_markers = ("Ð", "Ñ", "â€”", "â€“", "â”")
+
+        for path in checked_files:
+            with self.subTest(path=path.name):
+                text = path.read_text(encoding="utf-8")
+                for marker in mojibake_markers:
+                    self.assertNotIn(marker, text)
+
+    def test_repository_has_oss_launch_hygiene_files(self):
+        expected_files = (
+            ROOT / "docs" / "oss-launch-checklist.md",
+            ROOT / "docs" / "release-readiness.md",
+            ROOT / "docs" / "release-notes-template.md",
+            ROOT / "scripts" / "release-check.ps1",
+            ROOT / "scripts" / "release-manifest.ps1",
+            ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.md",
+            ROOT / ".github" / "ISSUE_TEMPLATE" / "benchmark_report.md",
+            ROOT / ".github" / "pull_request_template.md",
+        )
+        for path in expected_files:
+            with self.subTest(path=path):
+                self.assertTrue(path.exists(), f"{path} is missing")
+
+        launch = (ROOT / "docs" / "oss-launch-checklist.md").read_text(encoding="utf-8")
+        self.assertIn("Do not buy stars", launch)
+        self.assertIn("Codex for OSS", launch)
+
+        readiness = (ROOT / "docs" / "release-readiness.md").read_text(encoding="utf-8")
+        self.assertIn("Hypotheses and Tests", readiness)
+        self.assertIn("Production Go / No-Go", readiness)
+
+        release_check = (ROOT / "scripts" / "release-check.ps1").read_text(encoding="utf-8")
+        for command in (
+            "python -m unittest discover",
+            "python best_isolator.py --dry-run",
+            "npm --prefix ui audit",
+            "npm --prefix ui run smoke",
+            "npm --prefix ui run build",
+            "scripts/release-manifest.ps1",
+            "git check-ignore",
+            "Remove-Item -LiteralPath $packageOutput -Recurse -Force",
+        ):
+            self.assertIn(command, release_check)
+
+        manifest_script = (ROOT / "scripts" / "release-manifest.ps1").read_text(encoding="utf-8")
+        self.assertIn("Get-FileHash -Algorithm SHA256", manifest_script)
+        self.assertIn("SHA256SUMS.txt", manifest_script)
+
+        release_notes = (ROOT / "docs" / "release-notes-template.md").read_text(encoding="utf-8")
+        self.assertIn("SHA256SUMS.txt", release_notes)
+        self.assertIn("not code-signed", release_notes)
+
+
+if __name__ == "__main__":
+    unittest.main()

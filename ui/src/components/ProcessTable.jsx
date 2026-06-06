@@ -1,0 +1,147 @@
+import { useDeferredValue, useMemo, useState } from 'react';
+import { Tile } from '@carbon/react';
+import { PRIORITY_CLASS_LABELS, PROCESS_FILTERS } from '../constants/processes.js';
+import { useI18n } from '../i18n.jsx';
+import { formatCpuSets, formatPriorityClass } from '../utils/format.js';
+import { ProcessStatusBadge } from './ProcessStatusBadge.jsx';
+
+function processMatchesFilter(process, filter) {
+  if (filter === 'all') {
+    return true;
+  }
+  if (filter === 'game') {
+    return Boolean(process.game) || process.status === 'game';
+  }
+  if (filter === 'protected') {
+    return Boolean(process.protected) || process.status === 'protected';
+  }
+  return process.status === filter;
+}
+
+function processMatchesQuery(process, query) {
+  if (!query) {
+    return true;
+  }
+  const haystack = `${process.pid || ''} ${process.name || ''} ${process.source || ''} ${process.status || ''}`.toLowerCase();
+  return haystack.includes(query);
+}
+
+function formatPriorityLabel(priorityClass, t) {
+  if (typeof priorityClass !== 'number') {
+    return t('priority.default', formatPriorityClass(priorityClass));
+  }
+  return t(
+    `priority.${priorityClass}`,
+    PRIORITY_CLASS_LABELS[priorityClass] || t('priority.class', 'Class {{value}}').replace('{{value}}', priorityClass)
+  );
+}
+
+function formatCpuSetsLabel(process, t) {
+  const value = formatCpuSets(process.cpu_set_ids, process.affinity_mask);
+  return value === 'None' ? t('common.none', 'None') : value;
+}
+
+function formatProcessMode(mode, t) {
+  return mode ? t(`process.mode.${mode}`, mode) : t('process.modeWaiting', 'waiting for live snapshot');
+}
+
+export function ProcessTable({ snapshot }) {
+  const { t } = useI18n();
+  const [processFilter, setProcessFilter] = useState('all');
+  const [processQuery, setProcessQuery] = useState('');
+  const deferredQuery = useDeferredValue(processQuery);
+  const processes = Array.isArray(snapshot?.processes) ? snapshot.processes : [];
+  const normalizedQuery = deferredQuery.trim().toLowerCase();
+
+  const filteredProcesses = useMemo(() => {
+    const rows = [];
+    for (const process of processes) {
+      if (
+        processMatchesFilter(process, processFilter)
+        && processMatchesQuery(process, normalizedQuery)
+      ) {
+        rows.push(process);
+      }
+    }
+    return rows;
+  }, [processes, processFilter, normalizedQuery]);
+
+  return (
+    <Tile className="module-surface process-module">
+      <div className="process-module-header">
+        <div>
+          <div className="module-title" id="process-table-title">{t('process.title', 'Process List')}</div>
+          <div className="process-mode-note">
+            {formatProcessMode(snapshot?.process_mode, t)}
+          </div>
+        </div>
+        <div className="process-count-readout">
+          {filteredProcesses.length} / {processes.length}
+        </div>
+      </div>
+
+      <div className="process-filter-bar" aria-label="Process filters">
+        <div className="process-filter-group" role="group" aria-label="Status filter">
+          {PROCESS_FILTERS.map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              className={processFilter === filter.id ? 'active' : ''}
+              aria-pressed={processFilter === filter.id}
+              onClick={() => setProcessFilter(filter.id)}
+            >
+              {t(`process.filter.${filter.id}`, filter.label)}
+            </button>
+          ))}
+        </div>
+        <input
+          aria-label="Search processes"
+          className="process-search"
+          type="search"
+          placeholder={t('process.search', 'Search PID, name, source')}
+          value={processQuery}
+          onChange={(event) => setProcessQuery(event.target.value)}
+        />
+      </div>
+
+      <div className="process-table-wrap">
+        <table className="process-table" aria-labelledby="process-table-title">
+          <thead>
+            <tr>
+              <th scope="col">{t('process.column.status', 'Status')}</th>
+              <th scope="col">{t('process.column.pid', 'PID')}</th>
+              <th scope="col">{t('process.column.name', 'Name')}</th>
+              <th scope="col">{t('process.column.priority', 'Priority')}</th>
+              <th scope="col">{t('process.column.cpuSets', 'CPU Sets')}</th>
+              <th scope="col">{t('process.column.source', 'Source')}</th>
+              <th scope="col">{t('process.column.threads', 'Threads')}</th>
+              <th scope="col">{t('process.column.gen', 'Gen')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredProcesses.length ? (
+              filteredProcesses.map((process) => (
+                <tr key={`${process.pid}-${process.create_time || 0}`} className={`process-row ${process.status || 'tracked'}`}>
+                  <td><ProcessStatusBadge status={process.status} /></td>
+                  <td className="mono">{process.pid}</td>
+                  <td className="process-name" title={process.name || ''}>{process.name || t('process.nameFallback', 'process')}</td>
+                  <td>{formatPriorityLabel(process.priority_class, t)}</td>
+                  <td className="mono" title={formatCpuSetsLabel(process, t)}>
+                    {formatCpuSetsLabel(process, t)}
+                  </td>
+                  <td>{process.source || t('process.source.tracked', 'tracked')}</td>
+                  <td className="mono">{process.thread_count ?? 0}</td>
+                  <td className="mono">{process.gen ?? 0}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="process-empty" colSpan={8}>{t('process.empty', 'No tracked processes match the current view')}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Tile>
+  );
+}
