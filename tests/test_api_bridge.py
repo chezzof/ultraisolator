@@ -2,12 +2,14 @@ import http.client
 import contextlib
 import io
 import json
+import os
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from isolator.app import EsportsIsolatorPro
-from server.__main__ import _parent_heartbeat_loop
+from server.__main__ import _parent_heartbeat_loop, main as server_main
 from server.bridge import BridgeConflict, IsolatorBridge
 from server.http_api import create_handler, create_server
 
@@ -335,6 +337,11 @@ class HttpApiTests(unittest.TestCase):
                 ("GET", "/api/config", None),
                 ("GET", "/api/config/defaults", None),
                 ("GET", "/api/logs", None),
+                ("GET", "/api/live?once=1", None),
+                ("GET", "/api/topology?refresh=1", None),
+                ("GET", "/api/analysis", None),
+                ("GET", "/api/readiness", None),
+                ("GET", "/api/msi", None),
                 ("POST", "/api/start", b""),
                 ("POST", "/api/stop", b""),
                 ("POST", "/api/recover", b""),
@@ -369,6 +376,15 @@ class HttpApiTests(unittest.TestCase):
         self.assertEqual(200, ok_response.status)
         self.assertEqual(200, header_response.status)
         self.assertFalse(ok_body["running"])
+
+    def test_standalone_server_requires_token_by_default(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with contextlib.redirect_stderr(io.StringIO()) as stderr:
+                with self.assertRaises(SystemExit) as ctx:
+                    server_main(["--port", "0"])
+
+        self.assertEqual(2, ctx.exception.code)
+        self.assertIn("--api-token", stderr.getvalue())
 
     def test_malformed_origin_is_rejected_without_crashing(self):
         bridge = IsolatorBridge(engine_factory=lambda *_args: FakeEngine())

@@ -87,6 +87,33 @@ function requestStatus(url, options = {}) {
   });
 }
 
+function requestText(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const request = http.request(url, {
+      method: options.method || 'GET',
+      timeout: 2500,
+      headers: {
+        ...(options.authorized === false ? {} : { Authorization: `Bearer ${apiToken}` }),
+        ...(options.headers || {})
+      }
+    }, (response) => {
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          reject(new Error(`${options.method || 'GET'} ${url} returned ${response.statusCode}`));
+          return;
+        }
+        resolve(text);
+      });
+    });
+    request.on('timeout', () => request.destroy(new Error(`Timed out requesting ${url}`)));
+    request.on('error', reject);
+    request.end();
+  });
+}
+
 function waitForStatus(baseUrl, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
@@ -184,6 +211,11 @@ async function main() {
 
     const unauthorizedStatus = await requestStatus(`${baseUrl}/api/status`, { authorized: false });
     assert(unauthorizedStatus === 401, '/api/status should reject missing API token during smoke test');
+    const unauthorizedLiveStatus = await requestStatus(`${baseUrl}/api/live?once=1`, { authorized: false });
+    assert(unauthorizedLiveStatus === 401, '/api/live should reject missing API token during smoke test');
+    const liveFrame = await requestText(`${baseUrl}/api/live?once=1`);
+    assert(liveFrame.includes('event: snapshot'), '/api/live?once=1 should emit an SSE snapshot event');
+    assert(liveFrame.includes('"running":false'), '/api/live?once=1 should include the stopped runtime snapshot');
 
     const invalidJsonStatus = await requestStatus(`${baseUrl}/api/config`, {
       method: 'PUT',

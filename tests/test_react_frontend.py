@@ -430,7 +430,7 @@ class ReactFrontendContractTests(unittest.TestCase):
             ROOT / "docs" / "release-notes-template.md",
             ROOT / "scripts" / "release-check.ps1",
             ROOT / "scripts" / "release-manifest.ps1",
-            ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.md",
+            ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml",
             ROOT / ".github" / "ISSUE_TEMPLATE" / "benchmark_report.md",
             ROOT / ".github" / "pull_request_template.md",
         )

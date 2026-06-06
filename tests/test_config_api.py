@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from server.bridge import IsolatorBridge
-from server.config_store import ConfigError, ConfigStore
+from server.config_store import DEFAULT_CONFIG, ConfigError, ConfigStore
 from server.http_api import create_handler, create_server
 from isolator.app import EsportsIsolatorPro
 
@@ -28,6 +28,11 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertEqual(["aggressive", "conservative"], defaults["schema"]["anti_cheat_mode"]["choices"])
         self.assertEqual([], defaults["reload"]["hot_reloadable"])
         self.assertTrue(defaults["reload"]["restart_required_when_running"])
+
+    def test_config_example_matches_runtime_defaults(self):
+        example = json.loads((Path(__file__).resolve().parents[1] / "config.json.example").read_text(encoding="utf-8"))
+
+        self.assertEqual(DEFAULT_CONFIG, example)
 
     def test_update_coerces_numeric_values_and_writes_canonical_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -166,14 +171,13 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertIn("app_profiles[0].priority_class", fields)
         self.assertIn("app_profiles[1]", fields)
 
-    def test_engine_reuses_config_store_path_validation(self):
+    def test_engine_fails_closed_on_invalid_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / "config.json"
             config_path.write_text(json.dumps({"log_file": str(Path(tmpdir).parent / "escape.log")}), encoding="utf-8")
 
-            isolator = EsportsIsolatorPro(config_path=str(config_path), scan_game_libraries=False)
-
-        self.assertEqual("", isolator.config["log_file"])
+            with self.assertRaises(ConfigError):
+                EsportsIsolatorPro(config_path=str(config_path), scan_game_libraries=False)
 
     def test_set_log_file_rejects_paths_outside_config_directory(self):
         with tempfile.TemporaryDirectory() as tmpdir:

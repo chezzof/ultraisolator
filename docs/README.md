@@ -5,15 +5,15 @@ HUD: background `#0A0A0A`, mint/cyan accent `#00D4AA`, light text `#E8E8EC`.
 
 | File | Size | Use |
 |------|------|-----|
-| [`banner.svg`](banner.svg) | 1280×400 | README hero banner (vector, scales crisply) |
-| [`social-preview.svg`](social-preview.svg) | 1280×640 | Source for the social/OG card |
-| [`social-preview.png`](social-preview.png) | 1280×640 | GitHub social preview & showcase card (raster) |
+| [`banner.svg`](banner.svg) | 1280x400 | README hero banner (vector, scales crisply) |
+| [`social-preview.svg`](social-preview.svg) | 1280x640 | Source for the social/OG card |
+| [`social-preview.png`](social-preview.png) | 1280x640 | GitHub social preview and showcase card (raster) |
 
 ## Setting the GitHub social preview
 
-GitHub does not read the social image from the repo automatically — upload it once:
+GitHub does not read the social image from the repo automatically - upload it once:
 
-**Settings → General → Social preview → Edit → Upload an image** and choose
+**Settings -> General -> Social preview -> Edit -> Upload an image** and choose
 [`docs/social-preview.png`](social-preview.png).
 
 This image is what renders when the repository is shared on social media,

@@ -134,7 +134,8 @@ class BaseMixin:
             return store.read()["config"]
         except ConfigError as exc:
             fields = ", ".join(error.get("field", "$") for error in exc.errors[:5])
-            self._log(f"[WARN] Invalid config {self.config_path}; using defaults. Fields: {fields}")
+            self._log(f"[ERROR] Invalid config {self.config_path}; refusing to apply system changes. Fields: {fields}")
+            raise
         except Exception as exc:
             self._log(f"[WARN] Failed to load {self.config_path}: {exc}")
         return store.defaults_response()["defaults"]

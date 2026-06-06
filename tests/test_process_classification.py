@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from isolator.app import EsportsIsolatorPro
 from isolator.winapi import ABOVE_NORMAL_PRIORITY_CLASS
+from server.config_store import ConfigError
 
 
 STEAM_RUNTIME_NAMES = (
@@ -407,6 +408,45 @@ class ProcessClassificationTests(unittest.TestCase):
         set_prio.assert_not_called()
         self.assertEqual([], remembered)
 
+    def test_boost_foreground_skips_when_pid_reused_create_time_mismatch(self):
+        isolator = EsportsIsolatorPro(
+            config_path="__no_local_config__.json",
+            scan_game_libraries=False,
+        )
+        isolator._self_pid = 1
+        isolator._parent_pid = 2
+        isolator._process_create_times = {500: 123}
+        isolator._get_process_name = lambda pid: "cs2.exe"
+        isolator._open_process = lambda *args, **kwargs: 99
+        isolator._get_process_create_time = lambda handle: 999
+        isolator._remember_process_state = lambda *a, **k: self.fail("state must not be captured for reused PID")
+
+        with patch("isolator.tuning.kernel32.SetPriorityClass", return_value=1) as set_prio:
+            with patch("isolator.tuning.kernel32.CloseHandle"):
+                result = isolator._boost_foreground(500)
+
+        self.assertFalse(result)
+        set_prio.assert_not_called()
+
+    def test_optimize_game_skips_when_pid_reused_create_time_mismatch(self):
+        isolator = EsportsIsolatorPro(
+            config_path="__no_local_config__.json",
+            scan_game_libraries=False,
+        )
+        isolator._process_create_times = {500: 123}
+        isolator._get_process_name = lambda pid: "cs2.exe"
+        isolator._open_process = lambda *args, **kwargs: 99
+        isolator._get_process_create_time = lambda handle: 999
+        isolator._remember_process_state = lambda *a, **k: self.fail("state must not be captured for reused PID")
+
+        with patch("isolator.tuning.kernel32.SetPriorityClass", return_value=1) as set_prio:
+            with patch("isolator.tuning.kernel32.SetProcessPriorityBoost", return_value=1):
+                with patch("isolator.tuning.kernel32.CloseHandle"):
+                    result = isolator._optimize_game(500)
+
+        self.assertFalse(result)
+        set_prio.assert_not_called()
+
     def test_jail_process_proceeds_when_create_time_unknown(self):
         # WHY: When create_time is unavailable (denied -> 0) the guard cannot
         # prove reuse, so jail proceeds (no regression vs. prior behavior).
@@ -579,13 +619,13 @@ class ProcessClassificationTests(unittest.TestCase):
         self.assertEqual([], calls)
         self.assertTrue(isolator._detect_protected_title("valorant.exe"))
 
-    def test_invalid_anti_cheat_mode_falls_back_to_aggressive(self):
+    def test_invalid_anti_cheat_mode_fails_closed(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as handle:
             json.dump({"anti_cheat_mode": "paranoid", "games": ["cs2.exe"]}, handle)
             config_path = handle.name
         try:
-            isolator = EsportsIsolatorPro(config_path=config_path, scan_game_libraries=False)
-            self.assertEqual("aggressive", isolator.anti_cheat_mode)
+            with self.assertRaises(ConfigError):
+                EsportsIsolatorPro(config_path=config_path, scan_game_libraries=False)
         finally:
             os.remove(config_path)
 

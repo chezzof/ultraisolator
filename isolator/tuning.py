@@ -461,6 +461,7 @@ class TuningMixin:
                     self._touched.pop(pid, None)
             return False
 
+        restore_failed = False
         try:
             current_create_time = self._get_process_create_time(handle)
             # WHY: Only skip restoration when BOTH create times are known
@@ -496,22 +497,30 @@ class TuningMixin:
 
             cpu_set_ids = state.get("cpu_set_ids", [])
             reset_affinity_mask = entry_source != "optimize_game" or bool(cpu_set_ids)
-            self._apply_process_cpu_sets(handle, cpu_set_ids, reset_affinity_mask=reset_affinity_mask)
-            restored_attrs.append("cpu_sets")
+            if self._apply_process_cpu_sets(handle, cpu_set_ids, reset_affinity_mask=reset_affinity_mask):
+                restored_attrs.append("cpu_sets")
+            elif entry_source == "jail":
+                restore_failed = True
             if "affinity_mask" in state and reset_affinity_mask:
                 if kernel32.SetProcessAffinityMask(handle, ctypes.c_size_t(state["affinity_mask"])):
                     restored_attrs.append("affinity")
                 else:
+                    if entry_source == "jail":
+                        restore_failed = True
                     self._log_restore_access_issue(pid, entry_name, entry_source, "SetProcessAffinityMask")
             if "priority_boost_disabled" in state:
                 if kernel32.SetProcessPriorityBoost(handle, bool(state["priority_boost_disabled"])):
                     restored_attrs.append("priority_boost")
                 else:
+                    if entry_source == "jail":
+                        restore_failed = True
                     self._log_restore_access_issue(pid, entry_name, entry_source, "SetProcessPriorityBoost")
             if "priority_class" in state and state["priority_class"]:
                 if kernel32.SetPriorityClass(handle, state["priority_class"]):
                     restored_attrs.append(f"priority=0x{state['priority_class']:X}")
                 else:
+                    if entry_source == "jail":
+                        restore_failed = True
                     self._log_once(("restore_priority", pid), f"[WARN] SetPriorityClass failed for pid={pid} ({entry_name}): {self._last_error_text()}")
 
             # WHY: Restore the original EcoQoS / power throttling state. When
@@ -538,6 +547,8 @@ class TuningMixin:
             if kernel32.SetProcessInformation(handle, PROCESS_INFORMATION_CLASS_POWER_THROTTLING, ctypes.byref(power_state), ctypes.sizeof(power_state)):
                 restored_attrs.append(f"ecoqos(ctrl=0x{restore_control:X},state=0x{restore_state:X})")
             else:
+                if entry_source == "jail":
+                    restore_failed = True
                 self._log_once(("restore_ecoqos", pid), f"[WARN] Failed to restore EcoQoS for pid={pid} ({entry_name}): {self._last_error_text()}")
 
             if "page_priority" in state:
@@ -555,7 +566,7 @@ class TuningMixin:
                 except OSError:
                     pass
             self._log(f"[RESTORE] pid={pid} ({entry_name}): {', '.join(restored_attrs)}")
-            return True
+            return not restore_failed
         finally:
             kernel32.CloseHandle(handle)
             remove_jail_state = False
@@ -567,9 +578,10 @@ class TuningMixin:
                 # enabled and no record to restore from.
                 current = self._touched.get(pid)
                 if current is not None and current.get("gen", 0) == original_entry_gen:
-                    remove_jail_state = current.get("source") == "jail"
-                    self._touched.pop(pid, None)
-                    self._last_hot_thread_refresh.pop(pid, None)
+                    if not restore_failed:
+                        remove_jail_state = current.get("source") == "jail"
+                        self._touched.pop(pid, None)
+                        self._last_hot_thread_refresh.pop(pid, None)
             if remove_jail_state:
                 self._remove_jail_state(pid)
 
@@ -737,6 +749,8 @@ class TuningMixin:
             return False
 
         try:
+            if not self._pid_identity_matches_snapshot(pid, handle, name, "foreground"):
+                return False
             # WHY: Snapshot inside the try/finally so a failure during
             # state capture cannot leak the open handle.
             self._remember_process_state(pid, handle, name, source="foreground")
@@ -965,6 +979,8 @@ class TuningMixin:
             return False
 
         try:
+            if not self._pid_identity_matches_snapshot(pid, handle, name, "optimize_game"):
+                return False
             # WHY: Snapshot inside the try/finally so a failure during
             # state capture cannot leak the open handle.
             self._remember_process_state(pid, handle, name, source="optimize_game")
@@ -1003,3 +1019,22 @@ class TuningMixin:
             return False
         finally:
             kernel32.CloseHandle(handle)
+
+    def _pid_identity_matches_snapshot(self, pid, handle, expected_name, operation):
+        expected_create_time = int(getattr(self, "_process_create_times", {}).get(int(pid), 0) or 0)
+        current_create_time = self._get_process_create_time(handle)
+        if expected_create_time and current_create_time and expected_create_time != current_create_time:
+            self._log_once(
+                (f"{operation}_pid_reuse", int(pid), expected_name),
+                f"[INFO] Skipping {operation} for pid={pid} ({expected_name}): PID reuse detected.",
+            )
+            return False
+        if not expected_create_time or not current_create_time:
+            current_name = self._normalize_name(self._get_process_name(pid))
+            if current_name and expected_name and current_name != expected_name:
+                self._log_once(
+                    (f"{operation}_pid_name_reuse", int(pid), expected_name),
+                    f"[INFO] Skipping {operation} for pid={pid}: was '{expected_name}', now '{current_name}'.",
+                )
+                return False
+        return True

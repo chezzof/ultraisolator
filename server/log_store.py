@@ -8,8 +8,15 @@ import re
 DEFAULT_LOG_LIMIT = 500
 MAX_LOG_LIMIT = 1000
 _READ_CHUNK_BYTES = 8192
+_MAX_LINE_COUNT_BYTES = 256 * 1024
 _TIMESTAMP_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+(.*)$")
 _TAG_RE = re.compile(r"^\[([A-Z][A-Z0-9_-]*)\]\s*(.*)$")
+_WINDOWS_USER_PATH_RE = re.compile(r"([A-Za-z]:\\Users\\)[^\\\s]+(\\[^\s]*)?", re.IGNORECASE)
+_TOKEN_VALUE_RE = re.compile(
+    r"\b(api[-_ ]?key|token|secret|password|authorization|bearer)\b\s*[:=]\s*([A-Za-z0-9._~+/=-]{8,})",
+    re.IGNORECASE,
+)
+_LONG_SECRET_RE = re.compile(r"\b[A-Za-z0-9._~+/=-]{32,}\b")
 _NEUTRAL_TAGS = {"INFO", "WARN", "WARNING", "ERROR", "CRITICAL", "FATAL"}
 _CATEGORY_KEYWORDS = (
     ("jail", ("jail", "jailed", "jailing")),
@@ -32,7 +39,7 @@ def coerce_log_limit(value):
 
 
 def parse_log_line(raw_line, line_number):
-    raw = str(raw_line).rstrip("\r\n")
+    raw = _redact_log_text(str(raw_line).rstrip("\r\n"))
     timestamp = None
     text = raw
     timestamp_match = _TIMESTAMP_RE.match(raw)
@@ -111,9 +118,7 @@ def _display_log_path(path):
 
 
 def _tail_lines(path, limit):
-    total_lines = _count_lines(path)
-    if total_lines == 0:
-        return [], 0
+    size = path.stat().st_size
 
     with open(path, "rb") as handle:
         handle.seek(0, os.SEEK_END)
@@ -132,6 +137,9 @@ def _tail_lines(path, limit):
     lines = text.splitlines()
     if len(lines) > limit:
         lines = lines[-limit:]
+    if not lines:
+        return [], 0
+    total_lines = _count_lines(path) if size <= _MAX_LINE_COUNT_BYTES else len(lines)
     return lines, total_lines
 
 
@@ -148,6 +156,12 @@ def _count_lines(path):
     if last_byte and last_byte != b"\n":
         count += 1
     return count
+
+
+def _redact_log_text(text):
+    redacted = _WINDOWS_USER_PATH_RE.sub(r"\1<user>\\<redacted>", str(text))
+    redacted = _TOKEN_VALUE_RE.sub(lambda match: f"{match.group(1)}=<redacted>", redacted)
+    return _LONG_SECRET_RE.sub("<redacted>", redacted)
 
 
 def _severity_for(tag, message):

@@ -62,7 +62,14 @@ def main(argv=None):
     parser.add_argument("--config", default="config.json")
     parser.add_argument("--parent-pid", type=int, default=os.getppid())
     parser.add_argument("--api-token", default=os.environ.get("EII_API_TOKEN", ""))
+    parser.add_argument(
+        "--allow-unauthenticated-loopback",
+        action="store_true",
+        help="Allow unauthenticated loopback API access. Intended only for local development.",
+    )
     args = parser.parse_args(argv)
+    if not args.api_token and not args.allow_unauthenticated_loopback:
+        parser.error("--api-token or EII_API_TOKEN is required; use --allow-unauthenticated-loopback only for local development.")
 
     bridge = IsolatorBridge(config_path=args.config)
     server = create_server((args.host, args.port), create_handler(bridge, api_token=args.api_token))

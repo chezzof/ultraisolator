@@ -355,11 +355,10 @@ class TopologyMixin:
 
     def _apply_process_cpu_sets(self, handle, cpu_set_ids, reset_affinity_mask=True):
         if not cpu_set_ids:
-            if reset_affinity_mask:
-                process_mask = ctypes.c_size_t()
-                system_mask = ctypes.c_size_t()
-                if kernel32.GetProcessAffinityMask(handle, ctypes.byref(process_mask), ctypes.byref(system_mask)):
-                    kernel32.SetProcessAffinityMask(handle, ctypes.c_size_t(system_mask.value))
+            # Clearing CPU Sets is the cross-processor-group way to remove the
+            # restriction. Do not also call SetProcessAffinityMask(system_mask):
+            # that legacy API is primary-group scoped and can collapse a process
+            # back to one group on >64-logical-CPU Windows systems.
             return self._set_process_default_cpu_sets(handle, [])
         # WHY: CPU Sets API does not work with 32-bit (WoW64) processes on 64-bit
         # Windows. SetProcessDefaultCpuSets silently fails for them. Detect this

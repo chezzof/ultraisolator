@@ -50,13 +50,16 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Install UI dependencies
-        run: npm ci --prefix ui
+        run: npm ci --ignore-scripts --prefix ui
 
       - name: Build renderer
         run: npm --prefix ui run build:renderer
 
       - name: Generate deterministic assets
         run: npm --prefix ui run build:assets
+
+      - name: Verify deterministic assets are committed
+        run: git diff --exit-code -- ui/assets
 
       - name: Run UI smoke test
         run: npm --prefix ui run smoke

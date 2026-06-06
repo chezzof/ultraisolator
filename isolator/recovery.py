@@ -312,6 +312,7 @@ class RecoveryMixin:
         self._log(f"{prefix} Restoring {len(pids)} process(es) from crash jail state.")
         restored = 0
         dirty = False
+        unresolved = False
         now = time.time()
         for pid_str, saved_entry in list(pids.items()):
             try:
@@ -342,6 +343,11 @@ class RecoveryMixin:
                 quiet=True,
             )
             if not handle:
+                unresolved = True
+                self._log_once(
+                    ("jail_recovery_open_failed", pid),
+                    f"{prefix} Cannot open pid={pid}; leaving jail recovery state in place for retry.",
+                )
                 continue
             try:
                 current_create_time = self._get_process_create_time(handle)
@@ -378,6 +384,8 @@ class RecoveryMixin:
                 restored += 1
                 pids.pop(pid_str, None)
                 dirty = True
+            else:
+                unresolved = True
         if dirty:
             if pids:
                 self._save_jail_state(state)
@@ -386,6 +394,7 @@ class RecoveryMixin:
         remaining = self._load_jail_state()
         if isinstance(remaining, dict) and remaining.get("pids"):
             self._log(f"{prefix} {restored} restored; some jail entries remain for manual inspection.")
+            unresolved = True
         else:
             self._log(f"{prefix} Crash jail recovery complete ({restored} restored).")
-        return True
+        return not unresolved

@@ -296,10 +296,13 @@ class ConfigStore:
         if not os.path.exists(self.config_path):
             return {}, False
         with open(self.config_path, "r", encoding="utf-8") as handle:
-            loaded = json.load(
-                handle,
-                parse_constant=lambda value: (_ for _ in ()).throw(ValueError(f"Invalid numeric constant: {value}")),
-            )
+            try:
+                loaded = json.load(
+                    handle,
+                    parse_constant=lambda value: (_ for _ in ()).throw(ValueError(f"Invalid numeric constant: {value}")),
+                )
+            except ValueError as exc:
+                raise ConfigError([{"field": "$", "message": f"config file must be valid JSON: {exc}"}])
         if not isinstance(loaded, dict):
             raise ConfigError([{"field": "$", "message": "config file must contain a JSON object."}])
         return loaded, True

@@ -1,10 +1,13 @@
 import http.client
+import io
 import json
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
+from server.log_store import read_log_payload
 from server.bridge import IsolatorBridge
 from server.http_api import create_handler, create_server
 
@@ -79,6 +82,68 @@ class LogApiTests(unittest.TestCase):
         self.assertFalse(payload["available"])
         self.assertEqual("log_file_not_configured", payload["reason"])
         self.assertEqual([], payload["entries"])
+
+    def test_log_payload_redacts_local_paths_and_token_like_values(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "isolator.log"
+            log_path.write_text(
+                "2026-05-20 02:00:00 [WARN] token=abcdef1234567890abcdef1234567890 "
+                r"C:\Users\Alice\AppData\Local\secret.txt pid=1234"
+                "\n",
+                encoding="utf-8",
+            )
+
+            payload = read_log_payload(str(log_path), limit=1)
+
+        entry = payload["entries"][0]
+        self.assertNotIn("abcdef1234567890abcdef1234567890", entry["message"])
+        self.assertNotIn("Alice", entry["message"])
+        self.assertNotIn("secret.txt", entry["message"])
+        self.assertNotIn("abcdef1234567890abcdef1234567890", entry["raw"])
+
+    def test_log_tail_does_not_scan_entire_large_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "isolator.log"
+            log_path.write_text(("early line\n" * 40000) + "last line\n", encoding="utf-8")
+            file_size = log_path.stat().st_size
+
+            real_open = open
+            bytes_read = 0
+
+            class CountingReader:
+                def __init__(self, wrapped):
+                    self._wrapped = wrapped
+
+                def __enter__(self):
+                    self._wrapped.__enter__()
+                    return self
+
+                def __exit__(self, *args):
+                    return self._wrapped.__exit__(*args)
+
+                def __iter__(self):
+                    return iter(self._wrapped)
+
+                def __getattr__(self, name):
+                    return getattr(self._wrapped, name)
+
+                def read(self, size=-1):
+                    nonlocal bytes_read
+                    data = self._wrapped.read(size)
+                    bytes_read += len(data)
+                    return data
+
+            def counting_open(*args, **kwargs):
+                handle = real_open(*args, **kwargs)
+                if args and Path(args[0]) == log_path and "b" in (args[1] if len(args) > 1 else kwargs.get("mode", "r")):
+                    return CountingReader(handle)
+                return handle
+
+            with patch("server.log_store.open", counting_open):
+                payload = read_log_payload(str(log_path), limit=1)
+
+        self.assertEqual(["last line"], [entry["message"] for entry in payload["entries"]])
+        self.assertLess(bytes_read, file_size // 2)
 
 
 if __name__ == "__main__":

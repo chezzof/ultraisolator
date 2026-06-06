@@ -22,10 +22,10 @@ Current production target:
 | Default config is valid and safe to parse | `python best_isolator.py --dry-run` | exit code 0 |
 | UI dependency tree has no known npm audit findings | `npm --prefix ui audit` | 0 vulnerabilities |
 | Renderer compiles for production | `npm --prefix ui run build:renderer` | Vite exits 0 and writes `ui/dist` |
-| Deterministic icon generation still works | `npm --prefix ui run build:assets` | command exits 0 |
+| Deterministic icon generation still works | `npm --prefix ui run build:assets` plus `git diff --exit-code -- ui/assets` | command exits 0 and tracked assets do not drift |
 | Local API bridge and built renderer surface are coherent | `npm --prefix ui run smoke` | smoke exits 0 |
 | Windows artifacts are reproducible locally | `npm --prefix ui run build` | NSIS and portable artifacts are written to `ui/dist-packaged` |
-| Release artifacts are verifiable | `powershell -File scripts/release-manifest.ps1` | `ui/dist-packaged/SHA256SUMS.txt` contains SHA256 hashes for installer and portable artifacts |
+| Release artifacts are verifiable | `powershell -File scripts/release-manifest.ps1` plus release gate manifest checks | installer and portable artifacts are non-empty, no unexpected root artifacts remain, and `SHA256SUMS.txt` contains exactly their SHA256 hashes |
 | Public docs are ready for reviewers | `scripts/release-check.ps1` public surface checks | README, build docs, security docs, OSS checklist, templates, and screenshots exist |
 | Public text has no mojibake artifacts | `scripts/release-check.ps1` text checks and frontend contract tests | no common UTF-8 mojibake marker characters in checked files |
 | Sensitive local files are not publishable by default | `git check-ignore` checks in `scripts/release-check.ps1` | config, logs, recovery state, and package artifacts are ignored |
@@ -63,7 +63,7 @@ Go:
 No-go:
 
 - Any automated gate fails.
-- npm audit reports high or critical vulnerabilities.
+- npm audit reports any vulnerability.
 - Python tests fail or config dry-run fails.
 - Screenshots do not match the shipped UI.
 - Release notes imply signed installer, bundled Python, PATH-based packaged Python lookup, cross-platform support, or anti-cheat bypass behavior.

@@ -18,7 +18,7 @@ I would use API credits to add safe local analysis workflows: explain logs, summ
 
 - Green GitHub Actions for Python and desktop UI checks.
 - `scripts/release-check.ps1` covering tests, dry-run, npm audit, renderer build, smoke test, package build, checksums, and public-surface checks.
-- CS2 VProf benchmark in `benchmark-results-hud.html`.
+- CS2 VProf benchmark in `benchmark-results-hud.html` with structured summary in `docs/benchmarks/cs2-vprof-summary.json`.
 - Screenshots under `docs/screenshots`.
 - Release notes and checksum manifest for `v1.1.1`.
 - Safety docs: `SECURITY.md`, `BUILDING.md`, `docs/release-readiness.md`, and `docs/oss-launch-checklist.md`.

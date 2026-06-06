@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from isolator.ifeo_power import IfeoPowerMixin
 from isolator.winapi import HIGH_PERFORMANCE_GUID, ULTIMATE_PERFORMANCE_GUID, make_guid
@@ -109,6 +110,11 @@ class PowerSchemeCorrectnessTests(unittest.TestCase):
         self.assertIs(power.set_calls[-1], power.original_guid)
         self.assertTrue(power.cleared)
         self.assertFalse(power._power_plan_active)
+
+    def test_game_exit_restores_unverified_power_switch(self):
+        source = (Path(__file__).resolve().parents[1] / "isolator" / "runtime.py").read_text(encoding="utf-8")
+
+        self.assertIn('self._power_plan_active or getattr(self, "_power_scheme_set_unverified", False)', source)
 
 
 if __name__ == "__main__":

@@ -191,6 +191,40 @@ class RecoveryStateTests(unittest.TestCase):
             self.assertIn("create_time", " ".join(messages))
             self.assertFalse(os.path.exists(jail_path))
 
+    def test_crash_jail_recovery_fails_closed_when_fresh_entry_cannot_open(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            jail_path = os.path.join(tmpdir, "jail_state.json")
+            with open(jail_path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "pids": {
+                            "4242": {
+                                "name": "discord.exe",
+                                "create_time": 123,
+                                "source": "jail",
+                                "state": {"priority_class": 64},
+                                "updated_at": time.time(),
+                            }
+                        }
+                    },
+                    handle,
+                )
+
+            isolator = EsportsIsolatorPro(
+                config_path="__no_local_config__.json",
+                scan_game_libraries=False,
+            )
+            messages = []
+            isolator._log = messages.append
+            isolator._log_once = lambda key, message: messages.append(message)
+            isolator._open_process = MagicMock(return_value=None)
+
+            with patch("isolator.recovery.JAIL_STATE_PATH", jail_path):
+                self.assertFalse(isolator._recover_jail_state_from_crash(auto=True))
+
+            self.assertTrue(os.path.exists(jail_path))
+            self.assertIn("cannot open", " ".join(messages).lower())
+
     def test_crash_jail_recovery_prunes_stale_entries_without_opening_process(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             jail_path = os.path.join(tmpdir, "jail_state.json")

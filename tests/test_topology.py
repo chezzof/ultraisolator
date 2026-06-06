@@ -42,6 +42,20 @@ class CpuSetApplicationTests(unittest.TestCase):
         self.assertEqual([(99, [1])], cpu_set_calls)
         self.assertEqual([(99, [1])], affinity_calls)
 
+    def test_clearing_cpu_sets_does_not_reset_legacy_affinity_mask(self):
+        isolator = EsportsIsolatorPro(
+            config_path="__no_local_config__.json",
+            scan_game_libraries=False,
+        )
+        cpu_set_calls = []
+        isolator._set_process_default_cpu_sets = lambda handle, ids: cpu_set_calls.append((handle, list(ids))) or True
+
+        with mock.patch("isolator.topology.kernel32.SetProcessAffinityMask") as set_affinity:
+            self.assertTrue(isolator._apply_process_cpu_sets(99, [], reset_affinity_mask=True))
+
+        self.assertEqual([(99, [])], cpu_set_calls)
+        set_affinity.assert_not_called()
+
 
 class CpuPartitionPolicyTests(unittest.TestCase):
     def test_four_core_homogeneous_keeps_three_game_cores_and_no_housekeeping(self):

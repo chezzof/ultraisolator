@@ -36,7 +36,7 @@ Esports Isolator PRO detects a running game, reserves cleaner CPU capacity for i
 | What a reviewer can verify | Evidence in this repository |
 |----------------------------|-----------------------------|
 | **Release readiness** | `scripts/release-check.ps1` runs Python tests, config dry-run, npm audit, renderer build, smoke test, package build, and checksum generation. |
-| **Measured performance** | CS2 VProf benchmark shows avg FPS +9.8%, P95 spike -26.0%, client rendering spike -48.0%, and HUD spike -87.6%. |
+| **Measured performance** | CS2 VProf benchmark shows avg FPS +9.8%, P95 spike -26.0%, client rendering spike -48.0%, and HUD spike -87.6%; source summary lives in `docs/benchmarks/cs2-vprof-summary.json`. |
 | **Safety boundary** | Windows-only, Administrator-scoped, anti-cheat-aware, protected process list, opt-in background jailing, and crash recovery. |
 | **OSS hygiene** | CI, issue templates, PR template, security policy, release checklist, reproducible build docs, and public submission notes. |
 
@@ -56,7 +56,7 @@ Competitive games are sensitive to short bursts of background scheduling noise. 
 
 ## Benchmark Result
 
-Measured with Counter-Strike 2 VProf telemetry. Full local report: [`benchmark-results-hud.html`](benchmark-results-hud.html).
+Measured with Counter-Strike 2 VProf telemetry. Full local report: [`benchmark-results-hud.html`](benchmark-results-hud.html). Structured source summary: [`docs/benchmarks/cs2-vprof-summary.json`](docs/benchmarks/cs2-vprof-summary.json).
 
 | Metric | Without | With Isolator | Change |
 |--------|---------|---------------|--------|

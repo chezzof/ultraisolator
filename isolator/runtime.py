@@ -309,7 +309,7 @@ class RuntimeMixin:
                                 gc.collect()
                                 gc_disabled = False
                                 self._log("[INFO] Python GC re-enabled and memory collected.")
-                            if self._power_plan_active:
+                            if self._power_plan_active or getattr(self, "_power_scheme_set_unverified", False):
                                 self._restore_power_scheme()
                             power_scheme_attempted = False
                             maintenance_jail_backlog = False

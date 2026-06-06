@@ -1,0 +1,33 @@
+{
+  "title": "CS2 VProf frame-time summary",
+  "status": "public summary",
+  "methodology": {
+    "game": "Counter-Strike 2",
+    "capture_tool": "CS2 VProf",
+    "comparison": "same workload without Esports Isolator vs with Esports Isolator",
+    "notes": [
+      "Background jailing remains opt-in.",
+      "Results are workload-specific and should be reproduced on target hardware before making tuning decisions.",
+      "Raw proprietary game captures are not redistributed; this file records the summarized source data used by the public benchmark HUD."
+    ]
+  },
+  "headline": {
+    "average_fps_delta_percent": 9.8,
+    "frame_total_p95_spike_without_ms": 8.87,
+    "frame_total_p95_spike_with_ms": 6.56,
+    "frame_total_p95_spike_delta_percent": -26.0,
+    "client_rendering_p95_spike_without_ms": 5.29,
+    "client_rendering_p95_spike_with_ms": 2.75,
+    "client_rendering_p95_spike_delta_percent": -48.0
+  },
+  "metrics": [
+    {"name": "FrameTotal", "without_avg_ms": 1.77, "without_p99_ms": 4.00, "without_p95_spike_ms": 8.87, "with_avg_ms": 1.61, "with_p99_ms": 4.83, "with_p95_spike_ms": 6.56},
+    {"name": "Client Rendering", "without_avg_ms": 1.08, "without_p99_ms": 1.72, "without_p95_spike_ms": 5.29, "with_avg_ms": 0.98, "with_p99_ms": 1.88, "with_p95_spike_ms": 2.75},
+    {"name": "Frame Boundary", "without_avg_ms": 0.67, "without_p99_ms": 1.30, "without_p95_spike_ms": 4.86, "with_avg_ms": 0.63, "with_p99_ms": 1.38, "with_p95_spike_ms": 2.36},
+    {"name": "Client Simulation", "without_avg_ms": 0.27, "without_p99_ms": 0.88, "without_p95_spike_ms": 4.26, "with_avg_ms": 0.25, "with_p99_ms": 0.83, "with_p95_spike_ms": 1.35},
+    {"name": "ClientSimulateFrame", "without_avg_ms": 0.23, "without_p99_ms": 0.53, "without_p95_spike_ms": 4.08, "with_avg_ms": 0.21, "with_p99_ms": 0.42, "with_p95_spike_ms": 0.73},
+    {"name": "Server Simulation", "without_avg_ms": 1.61, "without_p99_ms": 2.74, "without_p95_spike_ms": 5.73, "with_avg_ms": 1.54, "with_p99_ms": 2.55, "with_p95_spike_ms": 3.25},
+    {"name": "Server Game", "without_avg_ms": 1.39, "without_p99_ms": 2.54, "without_p95_spike_ms": 5.41, "with_avg_ms": 1.28, "with_p99_ms": 2.15, "with_p95_spike_ms": 2.88},
+    {"name": "HUD", "without_avg_ms": 0.08, "without_p99_ms": 0.38, "without_p95_spike_ms": 3.88, "with_avg_ms": 0.07, "with_p99_ms": 0.13, "with_p95_spike_ms": 0.48}
+  ]
+}

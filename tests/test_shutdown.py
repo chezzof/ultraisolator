@@ -156,6 +156,32 @@ class ShutdownFlowTests(unittest.TestCase):
         self.assertEqual([4242], removed)
         self.assertNotIn(4242, isolator._touched)
 
+    def test_restore_process_retains_jail_state_when_priority_restore_fails(self):
+        isolator = self._make_isolator()
+        with isolator._state_lock:
+            isolator._touched[4242] = {
+                "name": "discord.exe",
+                "create_time": 123,
+                "state": {"priority_class": 64},
+                "threads": {},
+                "source": "jail",
+                "gen": 7,
+            }
+
+        isolator._open_process = lambda *args, **kwargs: 99
+        isolator._get_process_create_time = lambda handle: 123
+        isolator._restore_threads_for_process = MagicMock()
+        isolator._apply_process_cpu_sets = MagicMock()
+        isolator._remove_jail_state = MagicMock()
+
+        with patch("isolator.tuning.kernel32.SetPriorityClass", return_value=0):
+            with patch("isolator.tuning.kernel32.SetProcessInformation", return_value=1):
+                with patch("isolator.tuning.kernel32.CloseHandle"):
+                    self.assertFalse(isolator._restore_process(4242))
+
+        self.assertIn(4242, isolator._touched)
+        isolator._remove_jail_state.assert_not_called()
+
 
 class JailStateRecoveryTests(unittest.TestCase):
     def test_record_and_remove_jail_state_round_trip(self):

@@ -31,6 +31,41 @@ function Assert-Exists {
   }
 }
 
+function Assert-NonEmptyFile {
+  param([Parameter(Mandatory = $true)][string]$Path)
+  Assert-Exists $Path
+  $item = Get-Item -LiteralPath $Path
+  if ($item.Length -le 0) {
+    throw "Release artifact is empty: $Path"
+  }
+}
+
+function Assert-ReleaseManifest {
+  param([Parameter(Mandatory = $true)][string]$Dist)
+  $expected = @($InstallerArtifact, $PortableArtifact)
+  foreach ($artifact in $expected) {
+    Assert-NonEmptyFile (Join-Path $Dist $artifact)
+  }
+  $manifestPath = Join-Path $Dist "SHA256SUMS.txt"
+  Assert-NonEmptyFile $manifestPath
+  $lines = @(Get-Content -LiteralPath $manifestPath -Encoding UTF8 | Where-Object { $_.Trim() })
+  if ($lines.Count -ne $expected.Count) {
+    throw "SHA256SUMS.txt must contain exactly $($expected.Count) artifact lines."
+  }
+  foreach ($artifact in $expected) {
+    $escaped = [regex]::Escape($artifact)
+    if (-not ($lines | Where-Object { $_ -match "^[a-f0-9]{64}  $escaped$" })) {
+      throw "SHA256SUMS.txt is missing a valid checksum line for $artifact"
+    }
+  }
+  $rootFiles = @(Get-ChildItem -LiteralPath $Dist -File | Select-Object -ExpandProperty Name)
+  $allowed = @($InstallerArtifact, $PortableArtifact, "SHA256SUMS.txt")
+  $extra = @($rootFiles | Where-Object { $_ -notin $allowed })
+  if ($extra.Count -gt 0) {
+    throw "Unexpected root release artifact(s): $($extra -join ', ')"
+  }
+}
+
 function Assert-TextClean {
   param([Parameter(Mandatory = $true)][string]$Path)
   $text = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
@@ -67,6 +102,10 @@ Invoke-Step "Deterministic asset generation" {
   npm --prefix ui run build:assets
 }
 
+Invoke-Step "Tracked asset drift check" {
+  git diff --exit-code -- ui/assets
+}
+
 Invoke-Step "UI smoke test" {
   npm --prefix ui run smoke
 }
@@ -81,14 +120,22 @@ if (-not $SkipPackage) {
     npm --prefix ui run build
   }
 
-  Assert-Exists "ui/dist-packaged/$InstallerArtifact"
-  Assert-Exists "ui/dist-packaged/$PortableArtifact"
+  $byproducts = @(
+    (Join-Path $packageOutput "win-unpacked"),
+    (Join-Path $packageOutput "$InstallerArtifact.blockmap"),
+    (Join-Path $packageOutput "builder-debug.yml")
+  )
+  foreach ($item in $byproducts) {
+    if (Test-Path -LiteralPath $item) {
+      Remove-Item -LiteralPath $item -Recurse -Force
+    }
+  }
 
   Invoke-Step "Release checksum manifest" {
     powershell -File scripts/release-manifest.ps1
   }
 
-  Assert-Exists "ui/dist-packaged/SHA256SUMS.txt"
+  Assert-ReleaseManifest $packageOutput
 }
 
 Write-Host "`n== Public surface checks ==" -ForegroundColor Cyan
@@ -99,7 +146,8 @@ $requiredFiles = @(
   "SECURITY.md",
   "docs/oss-launch-checklist.md",
   "docs/release-readiness.md",
-  ".github/ISSUE_TEMPLATE/bug_report.md",
+  "docs/benchmarks/cs2-vprof-summary.json",
+  ".github/ISSUE_TEMPLATE/bug_report.yml",
   ".github/ISSUE_TEMPLATE/benchmark_report.md",
   ".github/pull_request_template.md",
   "docs/screenshots/dashboard.png",
