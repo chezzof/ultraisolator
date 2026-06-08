@@ -11,6 +11,8 @@ import threading
 import time
 import winreg
 
+from .protected_state import default_protected_state_dir
+
 NTSTATUS = wintypes.LONG
 STATUS_INFO_LENGTH_MISMATCH = ctypes.c_long(0xC0000004).value
 ERROR_ALREADY_EXISTS = 183
@@ -54,9 +56,10 @@ IO_PRIORITY_VERY_LOW = 0
 IO_PRIORITY_NORMAL = 2
 
 MUTEX_NAME = r"Local\EsportsIsolatorProSingleton"
-IFEO_BACKUP_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ifeo_backup.json")
-RECOVERY_STATE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recovery_state.json")
-RECOVERY_STATE_VERSION = 1
+RECOVERY_STATE_DIR = default_protected_state_dir()
+IFEO_BACKUP_PATH = os.path.join(RECOVERY_STATE_DIR, "ifeo_backup.json")
+RECOVERY_STATE_PATH = os.path.join(RECOVERY_STATE_DIR, "recovery_state.json")
+RECOVERY_STATE_VERSION = 2
 JAIL_STATE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jail_state.json")
 JAIL_STATE_VERSION = 1
 # WHY (item 10): This TTL is a CRASH-RECOVERY BACKSTOP only — it bounds how

@@ -94,6 +94,7 @@ The release hypotheses and go/no-go criteria are documented in [`docs/release-re
 - Runtime: before launching Python, the packaged Electron app verifies that `resources/backend` is not standard-user writable, all manifest-listed files exist, file hashes match, and no source/executable backend file is missing from the manifest.
 - Python: production packaged startup rejects arbitrary inherited `EII_PYTHON`; the selected interpreter must exist and resolve under an allowlisted protected install root. This repository does not currently bundle a Python interpreter, so packaged builds fail closed unless a protected interpreter is supplied or a future release adds `resources/python/python.exe`.
 - Config: packaged builds store editable `config.json` in Electron `userData`, not inside the install directory.
+- Recovery: IFEO and power recovery state is written under protected app data with a versioned signed envelope, restrictive ACLs where Windows permits, and fail-closed restore if the file is missing its tag, tampered, downgraded, or standard-user writable.
 - First-time local packaging can download Electron Builder helper binaries such as NSIS resources; the app itself does not download or execute remote code at runtime.
 
 This keeps the engine/GUI separation intact: the Electron renderer can close to tray while the localhost API process continues until Exit.
@@ -113,6 +114,7 @@ This keeps the engine/GUI separation intact: the Electron renderer can close to 
 
 - Backend stderr is written to `backend.log` under Electron `userData` in packaged builds.
 - Runtime provenance failures are shown in the startup fallback window before Python is spawned.
+- Recovery-state rejections are logged without relying on local file paths; IFEO registry restore targets are re-derived from trusted executable names before HKLM writes or deletes.
 - The Logs page reads the configured `log_file` on demand and pauses live refresh during game mode.
 - The Advanced Tools page is read-only for MSI mode inspection; it does not write registry values.
 - First-run presets write `config.json` through the same `/api/config` validation path as Settings.

@@ -99,6 +99,7 @@ This project intentionally touches sensitive Windows controls. Read this before 
 - Use `anti_cheat_mode: "conservative"` for games with stricter anti-cheat stacks.
 - The tool does not download or execute remote code at runtime.
 - The localhost desktop API is protected by a per-launch bearer token kept in Electron main; renderer requests use allowlisted IPC proxy operations and never receive the raw token.
+- IFEO and power recovery state is stored under protected app data, signed with a local integrity tag, ACL-checked before restore, and rejected fail-closed if tampered.
 - Local logs/config/recovery files can contain process names and local paths; do not paste them publicly without review.
 
 ## Quick Start

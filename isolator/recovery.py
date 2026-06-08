@@ -1,6 +1,20 @@
 """Crash-recovery helpers for persistent system state."""
 
+import re
+
+from .protected_state import (
+    ProtectedStateError,
+    is_protected_state_path_safe,
+    read_protected_state_file,
+    remove_protected_state_file,
+    write_protected_state_file,
+)
 from .winapi import *
+
+
+GUID_STATE_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 
 
 class RecoveryMixin:
@@ -8,41 +22,55 @@ class RecoveryMixin:
     def _guid_to_state(guid):
         if guid is None:
             return None
-        return {
-            "data1": int(guid.Data1),
-            "data2": int(guid.Data2),
-            "data3": int(guid.Data3),
-            "data4": [int(value) for value in bytes(guid.Data4)],
-        }
+        data4 = [int(value) for value in bytes(guid.Data4)]
+        return (
+            f"{int(guid.Data1):08x}-{int(guid.Data2):04x}-{int(guid.Data3):04x}-"
+            f"{data4[0]:02x}{data4[1]:02x}-"
+            f"{''.join(f'{value:02x}' for value in data4[2:])}"
+        )
 
     @staticmethod
     def _guid_from_state(data):
-        if not isinstance(data, dict):
+        if not isinstance(data, str) or not GUID_STATE_PATTERN.fullmatch(data):
             return None
         try:
-            data4 = data.get("data4")
-            if not isinstance(data4, list) or len(data4) != 8:
-                return None
+            first, second, third, fourth, fifth = data.split("-")
+            data4_hex = fourth + fifth
+            data4 = [int(data4_hex[index:index + 2], 16) for index in range(0, 16, 2)]
             return GUID(
-                int(data["data1"]),
-                int(data["data2"]),
-                int(data["data3"]),
-                (ctypes.c_ubyte * 8)(*[int(value) & 0xFF for value in data4]),
+                int(first, 16),
+                int(second, 16),
+                int(third, 16),
+                (ctypes.c_ubyte * 8)(*data4),
             )
-        except (KeyError, TypeError, ValueError):
+        except (TypeError, ValueError):
             return None
+
+    def _is_recovery_state_acl_safe(self, path=RECOVERY_STATE_PATH):
+        return is_protected_state_path_safe(path)
 
     def _load_recovery_state(self):
         try:
             if not os.path.exists(RECOVERY_STATE_PATH):
                 return {}
-            with open(RECOVERY_STATE_PATH, "r", encoding="utf-8") as handle:
-                loaded = json.load(handle)
-            if isinstance(loaded, dict):
+            if not self._is_recovery_state_acl_safe(RECOVERY_STATE_PATH):
+                self._log_once(
+                    ("recovery_state_acl_unsafe",),
+                    "[WARN] Recovery state ACL is unsafe; rejecting recovery state.",
+                )
+                return None
+            loaded = read_protected_state_file(RECOVERY_STATE_PATH)
+            if isinstance(loaded, dict) and loaded.get("version") == RECOVERY_STATE_VERSION:
                 return loaded
             self._log_once(
                 ("recovery_state_invalid_type", type(loaded).__name__),
-                "[WARN] Recovery state file is invalid; leaving it in place for manual inspection.",
+                "[WARN] Recovery state file is invalid or downgraded; leaving it in place for manual inspection.",
+            )
+            return None
+        except ProtectedStateError as exc:
+            self._log_once(
+                ("recovery_state_protected", str(exc)),
+                f"[WARN] Recovery state rejected as invalid or tampered: {exc}.",
             )
             return None
         except Exception as exc:
@@ -50,29 +78,18 @@ class RecoveryMixin:
             return None
 
     def _save_recovery_state(self, state):
-        tmp = RECOVERY_STATE_PATH + ".tmp"
         try:
+            state = dict(state or {})
             state["version"] = RECOVERY_STATE_VERSION
             state["updated_at"] = time.time()
-            with open(tmp, "w", encoding="utf-8") as handle:
-                json.dump(state, handle)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(tmp, RECOVERY_STATE_PATH)
-            return True
+            return write_protected_state_file(RECOVERY_STATE_PATH, state)
         except Exception as exc:
             self._log_once(("recovery_state_save", type(exc).__name__), f"[WARN] Failed to save recovery state: {exc}")
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
             return False
 
     def _remove_recovery_state_file(self):
         try:
-            os.remove(RECOVERY_STATE_PATH)
-        except FileNotFoundError:
-            pass
+            remove_protected_state_file(RECOVERY_STATE_PATH)
         except OSError as exc:
             self._log_once(("recovery_state_remove", type(exc).__name__), f"[WARN] Failed to remove recovery state: {exc}")
 
@@ -132,7 +149,7 @@ class RecoveryMixin:
             ok = False
             self._log_once(
                 ("recovery_state_invalid_dirty",),
-                f"{prefix} Recovery state file is invalid; leaving it in place for manual inspection.",
+                f"{prefix} Recovery state file is invalid or tampered; power recovery state is invalid if present.",
             )
             state = {}
         power = state.get("power") if isinstance(state, dict) else None

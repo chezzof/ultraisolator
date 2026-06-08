@@ -1,6 +1,19 @@
 """IfeoPowerMixin implementation slice."""
 
+from .protected_state import (
+    ProtectedStateError,
+    is_protected_state_path_safe,
+    read_protected_state_file,
+    remove_protected_state_file,
+    write_protected_state_file,
+)
 from .winapi import *
+
+
+IFEO_STATE_VERSION = 2
+IFEO_STATE_OWNER = "EsportsIsolatorPRO"
+IFEO_BASE_PATH = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options"
+IFEO_FORBIDDEN_NAME_CHARS = set('<>:"/\\|?*')
 
 
 class IfeoPowerMixin:
@@ -49,13 +62,71 @@ class IfeoPowerMixin:
         decoded["values"] = decoded_values
         return decoded
 
+    def _derive_ifeo_paths(self, exe_name):
+        raw = str(exe_name or "")
+        normalized = self._normalize_game_name(raw)
+        bare_name = self._normalize_name(normalized).rstrip(". \t")
+        if not normalized or not normalized.endswith(".exe"):
+            return None
+        if any(separator in raw for separator in ("\\", "/", ":")):
+            return None
+        if any(ord(char) < 32 or char in IFEO_FORBIDDEN_NAME_CHARS for char in normalized):
+            return None
+        if normalized != os.path.basename(normalized):
+            return None
+        if normalized in IFEO_DENIED_EXES or bare_name in IFEO_DENIED_EXES:
+            return None
+        exe_path = f"{IFEO_BASE_PATH}\\{normalized}"
+        return normalized, exe_path, f"{exe_path}\\PerfOptions"
+
+    def _is_ifeo_state_acl_safe(self, path=IFEO_BACKUP_PATH):
+        return is_protected_state_path_safe(path)
+
+    @staticmethod
+    def _delete_registry_key_if_empty(path):
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as key:
+                subkeys, values, _ = winreg.QueryInfoKey(key)
+            if subkeys == 0 and values == 0:
+                winreg.DeleteKey(winreg.HKEY_LOCAL_MACHINE, path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+    def _validate_loaded_ifeo_snapshot(self, exe_name, snapshot):
+        derived = self._derive_ifeo_paths(exe_name)
+        if not derived or not isinstance(snapshot, dict):
+            return None
+        normalized, exe_path, perf_path = derived
+        if snapshot.get("version") != IFEO_STATE_VERSION or snapshot.get("owner") != IFEO_STATE_OWNER:
+            return None
+        if snapshot.get("exe_name") != normalized:
+            return None
+        if snapshot.get("exe_path") not in (None, exe_path) or snapshot.get("perf_path") not in (None, perf_path):
+            return None
+        values = snapshot.get("values")
+        if not isinstance(values, dict) or set(values) != set(IFEO_VALUES):
+            return None
+        decoded = self._decode_ifeo_snapshot(snapshot)
+        decoded["exe_name"] = normalized
+        decoded["exe_path"] = exe_path
+        decoded["perf_path"] = perf_path
+        decoded["owner"] = IFEO_STATE_OWNER
+        decoded["version"] = IFEO_STATE_VERSION
+        return decoded
+
     def _capture_ifeo_snapshot(self, exe_name):
+        derived = self._derive_ifeo_paths(exe_name)
+        if not derived:
+            return
+        exe_name, exe_path, perf_path = derived
         if exe_name in self._ifeo_original:
             return
-        base_path = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options"
-        exe_path = f"{base_path}\\{exe_name}"
-        perf_path = f"{exe_path}\\PerfOptions"
         snapshot = {
+            "version": IFEO_STATE_VERSION,
+            "owner": IFEO_STATE_OWNER,
+            "exe_name": exe_name,
             "exe_path": exe_path,
             "perf_path": perf_path,
             "exe_key_exists": False,
@@ -91,50 +162,73 @@ class IfeoPowerMixin:
 
     def _load_ifeo_backups(self):
         try:
-            if os.path.exists(IFEO_BACKUP_PATH):
-                with open(IFEO_BACKUP_PATH, "r", encoding="utf-8") as f:
-                    loaded = json.load(f)
-                
-                # Validate against live registry
-                valid_snapshots = {}
-                for exe_name, snapshot in loaded.items():
-                    # Check if the exe key exists
-                    exe_key_exists = False
-                    try:
-                        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, snapshot["exe_path"], 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY):
-                            exe_key_exists = True
-                    except OSError:
-                        pass
-                    
-                    # Check if the perf key exists
-                    perf_key_exists = False
-                    try:
-                        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, snapshot["perf_path"], 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY):
-                            perf_key_exists = True
-                    except OSError:
-                        pass
-                    
-                    # If live state matches snapshot (or snapshot thought it didn't exist and it still doesn't), keep it
-                    # But if the key was deleted out from under us, drop the snapshot so we don't restore garbage
-                    if snapshot.get("exe_key_exists") and not exe_key_exists:
-                        continue
-                    if snapshot.get("perf_key_exists") and not perf_key_exists:
-                        continue
+            if not os.path.exists(IFEO_BACKUP_PATH):
+                return
+            if not self._is_ifeo_state_acl_safe(IFEO_BACKUP_PATH):
+                self._ifeo_original = {}
+                self._log_once(
+                    ("ifeo_backup_acl_unsafe",),
+                    "[WARN] IFEO recovery state rejected: ACL is unsafe, so path validation was not attempted.",
+                )
+                return
+            try:
+                loaded = read_protected_state_file(IFEO_BACKUP_PATH)
+            except ProtectedStateError as exc:
+                self._ifeo_original = {}
+                self._log_once(
+                    ("ifeo_backup_protected", str(exc)),
+                    f"[WARN] IFEO recovery state rejected: tampered or path validation failed ({exc}).",
+                )
+                return
+            if not isinstance(loaded, dict) or loaded.get("version") != IFEO_STATE_VERSION:
+                self._ifeo_original = {}
+                self._log_once(
+                    ("ifeo_backup_invalid_schema",),
+                    "[WARN] IFEO recovery state rejected: invalid schema or path validation failed.",
+                )
+                return
+            snapshots = loaded.get("snapshots")
+            if not isinstance(snapshots, dict):
+                self._ifeo_original = {}
+                self._log_once(
+                    ("ifeo_backup_invalid_snapshots",),
+                    "[WARN] IFEO recovery state rejected: invalid snapshot map or path validation failed.",
+                )
+                return
 
-                    # WHY: Do NOT overwrite snapshot["*_key_exists"] with the
-                    # current state. Those flags must preserve the pre-write
-                    # reality ("did this key exist before WE created it?") so
-                    # that _restore_ifeo_priorities knows whether to DELETE
-                    # the keys we created. Overwriting here would silently
-                    # flip a False (we created it) to True (still exists
-                    # because we created it) and the cleanup branch
-                    # `if not snapshot["perf_key_exists"]: DeleteKey(...)`
-                    # would never fire — leaking IFEO entries permanently.
-                    # WHY (item 2): Decode hex-encoded REG_BINARY values back
-                    # into bytes so the restore path writes the original type.
-                    valid_snapshots[exe_name] = self._decode_ifeo_snapshot(snapshot)
+            valid_snapshots = {}
+            for exe_name, snapshot in snapshots.items():
+                validated = self._validate_loaded_ifeo_snapshot(exe_name, snapshot)
+                if not validated:
+                    self._log_once(
+                        ("ifeo_backup_reject_entry", exe_name),
+                        f"[WARN] IFEO recovery state rejected entry for {exe_name}: path or ownership validation failed.",
+                    )
+                    continue
 
-                self._ifeo_original = valid_snapshots
+                exe_key_exists = False
+                try:
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, validated["exe_path"], 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY):
+                        exe_key_exists = True
+                except OSError:
+                    pass
+
+                perf_key_exists = False
+                try:
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, validated["perf_path"], 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY):
+                        perf_key_exists = True
+                except OSError:
+                    pass
+
+                if validated.get("exe_key_exists") and not exe_key_exists:
+                    continue
+                if validated.get("perf_key_exists") and not perf_key_exists:
+                    continue
+
+                valid_snapshots[validated["exe_name"]] = validated
+
+            self._ifeo_original = valid_snapshots
+            return
         except Exception as exc:
             # WHY: Key dedup by exception TYPE name (not repr) for consistency
             # with the monitor-loop convention. repr embeds run-specific
@@ -142,31 +236,31 @@ class IfeoPowerMixin:
             self._log_once(("ifeo_load_backup", type(exc).__name__), f"[WARN] Failed to load IFEO backup: {exc}")
 
     def _save_ifeo_backups(self):
-        tmp = IFEO_BACKUP_PATH + ".tmp"
-        # WHY (item 2): Encode each snapshot so REG_BINARY (bytes) values are
-        # serializable; without this json.dump raised and the backup was never
-        # written, leaving crash recovery with no record of leaked IFEO keys.
-        serializable = {
-            exe_name: self._encode_ifeo_snapshot(snapshot)
-            for exe_name, snapshot in self._ifeo_original.items()
-        }
         try:
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(serializable, f)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp, IFEO_BACKUP_PATH)
+            if not self._ifeo_original:
+                remove_protected_state_file(IFEO_BACKUP_PATH)
+                return
+            serializable = {
+                exe_name: self._encode_ifeo_snapshot({
+                    **snapshot,
+                    "version": IFEO_STATE_VERSION,
+                    "owner": IFEO_STATE_OWNER,
+                    "exe_name": exe_name,
+                })
+                for exe_name, snapshot in self._ifeo_original.items()
+            }
+            write_protected_state_file(
+                IFEO_BACKUP_PATH,
+                {"version": IFEO_STATE_VERSION, "snapshots": serializable},
+            )
+            return
         except OSError as exc:
-            # WHY (item 2): Only clean up the temp file on real I/O errors, and
-            # log so the failure is visible. We deliberately do NOT swallow a
-            # serialization error and silently delete the temp file — that hid
-            # the original REG_BINARY bug. Encoding above makes the dump
-            # non-throwing, so any exception here is genuine disk/permission I/O.
             self._log_once(("ifeo_save_backup", type(exc).__name__), f"[WARN] Failed to save IFEO backup: {exc}")
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
+            return
+        except ProtectedStateError as exc:
+            self._log_once(("ifeo_save_backup", type(exc).__name__), f"[WARN] Failed to save IFEO backup: {exc}")
+            return
+
 
     def _set_ifeo_priority(self, exe_name):
         # WHY: Use _normalize_game_name (not _normalize_name) so that user
@@ -175,7 +269,9 @@ class IfeoPowerMixin:
         # this, an extension-less config entry silently writes the WRONG
         # registry key (Image File Execution Options\cs2 instead of
         # \cs2.exe), and the IFEO priority hint never applies.
-        exe_name = self._normalize_game_name(exe_name)
+        raw_exe_name = exe_name
+        derived = self._derive_ifeo_paths(raw_exe_name)
+        exe_name = derived[0] if derived else self._normalize_game_name(raw_exe_name)
         if not exe_name or not self._is_admin:
             return False
         # WHY (item 4): Check BOTH the game-normalized form (always ends .exe)
@@ -185,7 +281,7 @@ class IfeoPowerMixin:
         # bare form (basename + lower + trailing-dot/space strip) catches them
         # and any odd bypass spelling.
         bare_name = self._normalize_name(exe_name).rstrip(". \t")
-        if exe_name in IFEO_DENIED_EXES or bare_name in IFEO_DENIED_EXES:
+        if not derived or exe_name in IFEO_DENIED_EXES or bare_name in IFEO_DENIED_EXES:
             self._log_once(("ifeo_denied_exe", exe_name), f"[WARN] IFEO write blocked for protected/system executable: {exe_name}.")
             return False
 
@@ -245,9 +341,20 @@ class IfeoPowerMixin:
         # leaving no recovery path on the next admin-elevated launch.
         restored = []
         for exe_name, snapshot in list(self._ifeo_original.items()):
+            derived = self._derive_ifeo_paths(exe_name)
+            if not derived or not isinstance(snapshot, dict):
+                self._log_once(("restore_ifeo_invalid", exe_name), f"[WARN] Skipping untrusted IFEO recovery entry for {exe_name}.")
+                restored.append(exe_name)
+                continue
+            exe_name, exe_path, perf_path = derived
+            if snapshot.get("version") != IFEO_STATE_VERSION or snapshot.get("owner") != IFEO_STATE_OWNER:
+                self._log_once(("restore_ifeo_unowned", exe_name), f"[WARN] Skipping unowned IFEO recovery entry for {exe_name}.")
+                restored.append(exe_name)
+                continue
             try:
-                with winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, snapshot["perf_path"], 0, winreg.KEY_WRITE | winreg.KEY_WOW64_64KEY) as perf_key:
-                    for value_name, original in snapshot["values"].items():
+                with winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, perf_path, 0, winreg.KEY_WRITE | winreg.KEY_WOW64_64KEY) as perf_key:
+                    for value_name in IFEO_VALUES:
+                        original = snapshot["values"].get(value_name)
                         # WHY (item 1): Restore using the captured original
                         # TYPE, not a hard-coded REG_DWORD. If no prior value
                         # existed (value is None) we DELETE the value we wrote
@@ -262,16 +369,10 @@ class IfeoPowerMixin:
                             winreg.SetValueEx(perf_key, value_name, 0, original_type if original_type is not None else winreg.REG_DWORD, original_value)
 
                 if not snapshot["perf_key_exists"]:
-                    try:
-                        winreg.DeleteKey(winreg.HKEY_LOCAL_MACHINE, snapshot["perf_path"])
-                    except OSError:
-                        pass
+                    self._delete_registry_key_if_empty(perf_path)
 
                 if not snapshot["exe_key_exists"]:
-                    try:
-                        winreg.DeleteKey(winreg.HKEY_LOCAL_MACHINE, snapshot["exe_path"])
-                    except OSError:
-                        pass
+                    self._delete_registry_key_if_empty(exe_path)
                 restored.append(exe_name)
             except PermissionError:
                 self._log_once(("restore_ifeo_permission", exe_name), f"[WARN] Could not restore IFEO for {exe_name}; administrative rights are required.")
@@ -283,8 +384,7 @@ class IfeoPowerMixin:
 
         if not self._ifeo_original:
             try:
-                if os.path.exists(IFEO_BACKUP_PATH):
-                    os.remove(IFEO_BACKUP_PATH)
+                remove_protected_state_file(IFEO_BACKUP_PATH)
             except OSError:
                 pass
         else:
