@@ -161,8 +161,14 @@ class RecoveryMixin:
             )
         if isinstance(power, dict):
             original = self._guid_from_state(power.get("original_scheme"))
-            switched = bool(power.get("switched"))
-            if switched and original is not None:
+            switched = power.get("switched")
+            if not isinstance(switched, bool):
+                ok = False
+                self._log_once(
+                    ("recovery_power_invalid_switched_type", type(switched).__name__),
+                    f"{prefix} Power recovery state is invalid; leaving it in place for manual inspection.",
+                )
+            elif switched and original is not None:
                 if self._set_power_scheme(original):
                     self._log(f"{prefix} Restored original power scheme from recovery state.")
                     state.pop("power", None)

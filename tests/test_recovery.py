@@ -1,5 +1,6 @@
 import os
 import json
+import subprocess
 import tempfile
 import time
 import unittest
@@ -7,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from isolator.app import EsportsIsolatorPro
 from isolator.ifeo_power import IFEO_STATE_OWNER, IFEO_STATE_VERSION, IfeoPowerMixin
+from isolator import protected_state
 from isolator.protected_state import write_protected_state_file
 from isolator.recovery import RecoveryMixin
 from isolator.winapi import HIGH_PERFORMANCE_GUID, IFEO_VALUES, make_guid
@@ -19,6 +21,13 @@ def _is_under(parent, child):
         return os.path.commonpath([parent, child]) == parent
     except ValueError:
         return False
+
+
+def _write_test_protected_state_file(path, payload):
+    with patch("isolator.protected_state.apply_protected_state_acl", return_value=True), patch(
+        "isolator.protected_state.is_protected_state_path_safe", return_value=True
+    ):
+        return write_protected_state_file(path, payload)
 
 
 class DummyRecovery(RecoveryMixin):
@@ -151,7 +160,7 @@ class RecoveryStateTests(unittest.TestCase):
             snapshot = self._ifeo_snapshot("cs2.exe")
             snapshot["exe_path"] = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\lsass.exe"
             snapshot["perf_path"] = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\lsass.exe\PerfOptions"
-            write_protected_state_file(
+            _write_test_protected_state_file(
                 ifeo_path,
                 {"version": IFEO_STATE_VERSION, "snapshots": {"cs2.exe": snapshot}},
             )
@@ -170,7 +179,7 @@ class RecoveryStateTests(unittest.TestCase):
             ifeo_path = os.path.join(tmpdir, "ifeo_backup.json")
             snapshot = self._ifeo_snapshot("cs2.exe")
             snapshot["values"]["Debugger"] = {"value": None, "type": None}
-            write_protected_state_file(
+            _write_test_protected_state_file(
                 ifeo_path,
                 {"version": IFEO_STATE_VERSION, "snapshots": {"cs2.exe": snapshot}},
             )
@@ -187,7 +196,7 @@ class RecoveryStateTests(unittest.TestCase):
     def test_tampered_authenticated_ifeo_hmac_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             ifeo_path = os.path.join(tmpdir, "ifeo_backup.json")
-            write_protected_state_file(
+            _write_test_protected_state_file(
                 ifeo_path,
                 {"version": IFEO_STATE_VERSION, "snapshots": {"cs2.exe": self._ifeo_snapshot()}},
             )
@@ -223,6 +232,58 @@ class RecoveryStateTests(unittest.TestCase):
             self.assertTrue(recovery._persistent_recovery_incomplete)
             self.assertIn("acl", " ".join(recovery.messages).lower())
 
+    def test_windows_protected_state_acl_does_not_grant_current_user(self):
+        calls = []
+
+        def fake_icacls(args):
+            calls.append(args)
+            return subprocess.CompletedProcess(["icacls", *args], 0, "", "")
+
+        with patch("isolator.protected_state.os.name", "nt"), patch(
+            "isolator.protected_state.os.path.isdir", return_value=True
+        ), patch("isolator.protected_state._is_reparse_point", return_value=False), patch(
+            "isolator.protected_state._current_user_sid", return_value="S-1-5-21-1000"
+        ), patch("isolator.protected_state._acl_grants_untrusted_write", return_value=False), patch(
+            "isolator.protected_state._run_icacls", side_effect=fake_icacls
+        ):
+            self.assertTrue(protected_state.apply_protected_state_acl(r"C:\ProgramData\EsportsIsolatorPRO\Recovery"))
+
+        grant_call = next(args for args in calls if "/grant:r" in args)
+        self.assertIn("*S-1-5-18:(OI)(CI)(F)", grant_call)
+        self.assertIn("*S-1-5-32-544:(OI)(CI)(F)", grant_call)
+        self.assertNotIn("*S-1-5-21-1000:(OI)(CI)(F)", grant_call)
+        remove_call = next(args for args in calls if "/remove:g" in args)
+        self.assertIn("*S-1-5-21-1000", remove_call)
+
+    def test_windows_protected_state_acl_tolerates_absent_removed_sid(self):
+        def fake_icacls(args):
+            if "/remove:g" in args:
+                return subprocess.CompletedProcess(["icacls", *args], 1332, "", "No mapping between account names and security IDs was done.")
+            return subprocess.CompletedProcess(["icacls", *args], 0, "", "")
+
+        with patch("isolator.protected_state.os.name", "nt"), patch(
+            "isolator.protected_state.os.path.isdir", return_value=True
+        ), patch("isolator.protected_state._is_reparse_point", return_value=False), patch(
+            "isolator.protected_state._current_user_sid", return_value=None
+        ), patch("isolator.protected_state._acl_grants_untrusted_write", return_value=False), patch(
+            "isolator.protected_state._run_icacls", side_effect=fake_icacls
+        ):
+            self.assertTrue(protected_state.apply_protected_state_acl(r"C:\ProgramData\EsportsIsolatorPRO\Recovery"))
+
+    def test_windows_protected_state_rejects_writable_non_admin_sid(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            recovery_path = os.path.join(tmpdir, "recovery_state.json")
+            with open(recovery_path, "w", encoding="utf-8") as handle:
+                handle.write("{}")
+
+            with patch("isolator.protected_state.os.name", "nt"), patch(
+                "isolator.protected_state._is_reparse_point", return_value=False
+            ), patch(
+                "isolator.protected_state._acl_entries_for_path",
+                return_value=[{"Sid": "S-1-5-21-1000", "Rights": 278, "Type": "Allow"}],
+            ):
+                self.assertFalse(protected_state.is_protected_state_path_safe(recovery_path))
+
     def test_recovery_state_write_uses_authenticated_atomic_envelope(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             recovery_path = os.path.join(tmpdir, "recovery_state.json")
@@ -230,6 +291,8 @@ class RecoveryStateTests(unittest.TestCase):
 
             with patch("isolator.recovery.RECOVERY_STATE_PATH", recovery_path), patch(
                 "isolator.recovery.IFEO_BACKUP_PATH", ifeo_path
+            ), patch("isolator.protected_state.apply_protected_state_acl", return_value=True), patch(
+                "isolator.protected_state.is_protected_state_path_safe", return_value=True
             ):
                 recovery = DummyRecovery()
                 self.assertTrue(recovery._save_recovery_state({"power": {"switched": False}}))
@@ -279,7 +342,7 @@ class RecoveryStateTests(unittest.TestCase):
             recovery_path = os.path.join(tmpdir, "recovery_state.json")
             ifeo_path = os.path.join(tmpdir, "ifeo_backup.json")
             guid = make_guid(HIGH_PERFORMANCE_GUID)
-            write_protected_state_file(
+            _write_test_protected_state_file(
                 recovery_path,
                 {
                     "version": 2,
@@ -306,6 +369,34 @@ class RecoveryStateTests(unittest.TestCase):
 
             recovery._set_power_scheme.assert_not_called()
             self.assertIn("tampered", " ".join(recovery.messages).lower())
+
+    def test_authenticated_power_recovery_requires_boolean_switched_flag(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            recovery_path = os.path.join(tmpdir, "recovery_state.json")
+            ifeo_path = os.path.join(tmpdir, "ifeo_backup.json")
+            guid = make_guid(HIGH_PERFORMANCE_GUID)
+            _write_test_protected_state_file(
+                recovery_path,
+                {
+                    "version": 2,
+                    "power": {
+                        "switched": "false",
+                        "original_scheme": DummyRecovery._guid_to_state(guid),
+                        "scheme_in_use": "ultimate",
+                    },
+                },
+            )
+
+            with patch("isolator.recovery.RECOVERY_STATE_PATH", recovery_path), patch(
+                "isolator.recovery.IFEO_BACKUP_PATH", ifeo_path
+            ), patch.object(DummyRecovery, "_is_recovery_state_acl_safe", return_value=True):
+                recovery = DummyRecovery()
+                recovery._set_power_scheme = MagicMock(return_value=True)
+
+                self.assertFalse(recovery._recover_persistent_state(auto=True))
+
+            recovery._set_power_scheme.assert_not_called()
+            self.assertIn("power recovery state is invalid", " ".join(recovery.messages).lower())
 
     def test_ifeo_delete_key_preserves_non_owned_values(self):
         key = MagicMock()

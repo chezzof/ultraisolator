@@ -1,6 +1,8 @@
 """Protected recovery-state file helpers."""
 
 import base64
+import csv
+import ctypes
 import hashlib
 import hmac
 import json
@@ -13,6 +15,23 @@ import tempfile
 PROTECTED_STATE_VERSION = 2
 PROTECTED_STATE_APP_DIR = "EsportsIsolatorPRO"
 PROTECTED_STATE_KEY_FILE = "recovery-state.hmac.key"
+SYSTEM_SID = "S-1-5-18"
+ADMINISTRATORS_SID = "S-1-5-32-544"
+STANDARD_USER_SIDS = frozenset({
+    "S-1-1-0",
+    "S-1-5-11",
+    "S-1-5-32-545",
+})
+WRITE_RIGHTS_MASK = (
+    0x00000002  # WriteData / CreateFiles
+    | 0x00000004  # AppendData / CreateDirectories
+    | 0x00000010  # WriteExtendedAttributes
+    | 0x00000040  # DeleteSubdirectoriesAndFiles
+    | 0x00000100  # WriteAttributes
+    | 0x00010000  # Delete
+    | 0x00040000  # ChangePermissions
+    | 0x00080000  # TakeOwnership
+)
 
 
 class ProtectedStateError(ValueError):
@@ -34,39 +53,6 @@ def state_key_path(path):
     return os.path.join(os.path.dirname(os.path.abspath(path)), PROTECTED_STATE_KEY_FILE)
 
 
-def acl_grants_standard_user_write(acl_text):
-    risky_principals = (
-        "everyone",
-        "authenticated users",
-        "builtin\\users",
-        "nt authority\\authenticated users",
-        "users",
-        "s-1-1-0",
-        "s-1-5-11",
-        "s-1-5-32-545",
-    )
-    for line in str(acl_text or "").splitlines():
-        lower = line.lower()
-        if "(deny)" in lower:
-            continue
-        if not any(principal in lower for principal in risky_principals):
-            continue
-        rights = []
-        start = 0
-        while True:
-            open_index = lower.find("(", start)
-            if open_index < 0:
-                break
-            close_index = lower.find(")", open_index + 1)
-            if close_index < 0:
-                break
-            rights.append(lower[open_index + 1:close_index])
-            start = close_index + 1
-        if any(right in {"f", "m", "w", "wd", "ad", "dc", "wo"} for chunk in rights for right in chunk.split(",")):
-            return True
-    return False
-
-
 def _run_icacls(args):
     try:
         return subprocess.run(
@@ -80,33 +66,134 @@ def _run_icacls(args):
         return subprocess.CompletedProcess(["icacls", *args], 1, "", str(exc))
 
 
+def _is_reparse_point(path):
+    if not os.path.exists(path):
+        return False
+    if os.name != "nt":
+        return os.path.islink(path)
+    try:
+        attributes = ctypes.windll.kernel32.GetFileAttributesW(str(path))
+    except Exception:
+        return True
+    if attributes == 0xFFFFFFFF:
+        return True
+    return bool(attributes & 0x400)
+
+
+def _current_user_sid():
+    try:
+        result = subprocess.run(
+            ["whoami", "/user", "/fo", "csv", "/nh"],
+            check=False,
+            capture_output=True,
+            text=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        rows = list(csv.reader(result.stdout.splitlines()))
+    except csv.Error:
+        return None
+    if not rows or len(rows[0]) < 2:
+        return None
+    sid = rows[0][1].strip()
+    return sid.upper() if sid.upper().startswith("S-") else None
+
+
+def _acl_entries_for_path(path):
+    script = r"""
+$ErrorActionPreference = 'Stop'
+$acl = Get-Acl -LiteralPath $args[0]
+$acl.Access | ForEach-Object {
+  $sid = try {
+    $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
+  } catch {
+    $_.IdentityReference.Value
+  }
+  [pscustomobject]@{
+    Sid = $sid
+    Rights = [Int64]$_.FileSystemRights
+    Type = $_.AccessControlType.ToString()
+  }
+} | ConvertTo-Json -Compress
+"""
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script, path],
+            check=False,
+            capture_output=True,
+            text=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError as exc:
+        raise ProtectedStateError("recovery state ACL could not be inspected") from exc
+    if result.returncode != 0:
+        raise ProtectedStateError("recovery state ACL could not be inspected")
+    text = result.stdout.strip()
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ProtectedStateError("recovery state ACL could not be inspected") from exc
+    return parsed if isinstance(parsed, list) else [parsed]
+
+
+def _acl_grants_untrusted_write(path):
+    allowed_write_sids = {SYSTEM_SID, ADMINISTRATORS_SID}
+    entries = _acl_entries_for_path(path)
+    if not entries:
+        return True
+    for entry in entries:
+        if not isinstance(entry, dict):
+            return True
+        if str(entry.get("Type", "")).lower() != "allow":
+            continue
+        sid = str(entry.get("Sid", "")).upper()
+        try:
+            rights = int(entry.get("Rights", 0))
+        except (TypeError, ValueError):
+            return True
+        if rights & WRITE_RIGHTS_MASK and sid not in allowed_write_sids:
+            return True
+    return False
+
+
 def apply_protected_state_acl(path):
     target = os.path.abspath(path)
     if os.name != "nt":
         try:
             os.chmod(target, 0o700 if os.path.isdir(target) else 0o600)
         except OSError:
-            pass
-        return
+            return False
+        return True
 
-    domain = os.environ.get("USERDOMAIN")
-    name = os.environ.get("USERNAME")
-    user = f"{domain}\\{name}" if domain and name else name
+    if _is_reparse_point(target):
+        return False
     inherit = "(OI)(CI)" if os.path.isdir(target) else ""
     grants = [
         f"*S-1-5-18:{inherit}(F)",
         f"*S-1-5-32-544:{inherit}(F)",
     ]
-    if user:
-        grants.append(f"{user}:{inherit}(F)")
-    _run_icacls([target, "/inheritance:r", "/grant:r", *grants])
-    _run_icacls([target, "/remove:g", "*S-1-1-0", "*S-1-5-11", "*S-1-5-32-545"])
+    result = _run_icacls([target, "/inheritance:r", "/grant:r", *grants])
+    if result.returncode != 0:
+        return False
+    remove_sids = [f"*{sid}" for sid in sorted(STANDARD_USER_SIDS)]
+    current_sid = _current_user_sid()
+    if current_sid and current_sid not in {SYSTEM_SID, ADMINISTRATORS_SID}:
+        remove_sids.append(f"*{current_sid}")
+    _run_icacls([target, "/remove:g", *remove_sids])
+    return not _acl_grants_untrusted_write(target)
 
 
 def ensure_protected_state_parent(path):
     directory = os.path.dirname(os.path.abspath(path))
     os.makedirs(directory, exist_ok=True)
-    apply_protected_state_acl(directory)
+    if not apply_protected_state_acl(directory):
+        raise ProtectedStateError("recovery state ACL could not be protected")
     return directory
 
 
@@ -121,6 +208,8 @@ def is_protected_state_path_safe(path):
     if os.name != "nt":
         for target in targets:
             try:
+                if _is_reparse_point(target):
+                    return False
                 if os.stat(target).st_mode & 0o022:
                     return False
             except OSError:
@@ -128,10 +217,12 @@ def is_protected_state_path_safe(path):
         return True
 
     for target in targets:
-        result = _run_icacls([target])
-        if result.returncode != 0:
+        if _is_reparse_point(target):
             return False
-        if acl_grants_standard_user_write(f"{result.stdout}\n{result.stderr}"):
+        try:
+            if _acl_grants_untrusted_write(target):
+                return False
+        except ProtectedStateError:
             return False
     return True
 
@@ -145,7 +236,8 @@ def _write_bytes_atomic(path, data):
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp, path)
-        apply_protected_state_acl(path)
+        if not apply_protected_state_acl(path) or not is_protected_state_path_safe(path):
+            raise ProtectedStateError("recovery state ACL could not be protected")
     except Exception:
         try:
             os.remove(tmp)
