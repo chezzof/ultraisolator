@@ -12,6 +12,15 @@ from isolator.recovery import RecoveryMixin
 from isolator.winapi import HIGH_PERFORMANCE_GUID, IFEO_VALUES, make_guid
 
 
+def _is_under(parent, child):
+    parent = os.path.abspath(parent)
+    child = os.path.abspath(child)
+    try:
+        return os.path.commonpath([parent, child]) == parent
+    except ValueError:
+        return False
+
+
 class DummyRecovery(RecoveryMixin):
     def __init__(self):
         self._persistent_recovery_incomplete = False
@@ -89,8 +98,8 @@ class RecoveryStateTests(unittest.TestCase):
 
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-        self.assertFalse(os.path.commonpath([repo_root, winapi.IFEO_BACKUP_PATH]) == repo_root)
-        self.assertFalse(os.path.commonpath([repo_root, winapi.RECOVERY_STATE_PATH]) == repo_root)
+        self.assertFalse(_is_under(repo_root, winapi.IFEO_BACKUP_PATH))
+        self.assertFalse(_is_under(repo_root, winapi.RECOVERY_STATE_PATH))
         self.assertIn("EsportsIsolatorPRO", winapi.IFEO_BACKUP_PATH)
         self.assertIn("EsportsIsolatorPRO", winapi.RECOVERY_STATE_PATH)
 
