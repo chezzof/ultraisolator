@@ -116,7 +116,7 @@ This keeps the engine/GUI separation intact: the Electron renderer can close to 
 - The Logs page reads the configured `log_file` on demand and pauses live refresh during game mode.
 - The Advanced Tools page is read-only for MSI mode inspection; it does not write registry values.
 - First-run presets write `config.json` through the same `/api/config` validation path as Settings.
-- The localhost API is protected by a per-launch token passed from Electron main to the backend and renderer; standalone browser clients must provide `Authorization: Bearer <token>` when a token is configured.
+- The localhost API is protected by a per-launch token passed from Electron main to the backend. The Electron renderer never receives the raw token; it uses allowlisted IPC proxy operations owned by Electron main. Standalone browser clients must provide `Authorization: Bearer <token>` when a token is configured.
 
 ## Icons
 

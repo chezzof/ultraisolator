@@ -98,7 +98,7 @@ This project intentionally touches sensitive Windows controls. Read this before 
 - Packaged startup fails closed before Python is spawned if the interpreter path or `resources/backend` is standard-user writable, if backend hashes do not match, or if an executable/source backend file is missing from the manifest.
 - Use `anti_cheat_mode: "conservative"` for games with stricter anti-cheat stacks.
 - The tool does not download or execute remote code at runtime.
-- The localhost desktop API is protected by a per-launch bearer token passed through Electron IPC.
+- The localhost desktop API is protected by a per-launch bearer token kept in Electron main; renderer requests use allowlisted IPC proxy operations and never receive the raw token.
 - Local logs/config/recovery files can contain process names and local paths; do not paste them publicly without review.
 
 ## Quick Start

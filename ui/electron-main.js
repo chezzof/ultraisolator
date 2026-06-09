@@ -5,6 +5,7 @@ const fs = require('fs');
 const http = require('http');
 const net = require('net');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const {
   appendBackendStartupLog,
   backendConfigPath,
@@ -55,9 +56,29 @@ let backendStartupError = null;
 let backendRestartCount = 0;
 let backendRestartTimer = null;
 let ipcHandlersRegistered = false;
+let liveStreamRequest = null;
+let liveStreamReconnectTimer = null;
+let liveStreamStopped = true;
+let liveStreamBuffer = '';
 const MAX_BACKEND_RESTARTS = 4;
 const FALLBACK_PYTHON_COMMANDS = ['py', 'python3'];
 const backendApiToken = crypto.randomBytes(32).toString('hex');
+const MAX_PROXY_BODY_BYTES = 64 * 1024;
+const LIVE_RECONNECT_DELAY_MS = 1500;
+const BACKEND_OPERATION_ALLOWLIST = Object.freeze({
+  'status.get': { method: 'GET', path: '/api/status' },
+  'config.defaults.get': { method: 'GET', path: '/api/config/defaults' },
+  'config.get': { method: 'GET', path: '/api/config' },
+  'config.update': { method: 'PUT', path: '/api/config', body: true },
+  'topology.get': { method: 'GET', path: '/api/topology', booleanParam: 'refresh' },
+  'analysis.get': { method: 'GET', path: '/api/analysis' },
+  'readiness.get': { method: 'GET', path: '/api/readiness', booleanParam: 'refresh' },
+  'msi.get': { method: 'GET', path: '/api/msi', booleanParam: 'refresh' },
+  'logs.get': { method: 'GET', path: '/api/logs', integerParam: 'limit', min: 1, max: 500 },
+  'lifecycle.start': { method: 'POST', path: '/api/start' },
+  'lifecycle.stop': { method: 'POST', path: '/api/stop' },
+  'lifecycle.recover': { method: 'POST', path: '/api/recover' }
+});
 
 function normalizeAppSettings(candidate = {}) {
   const language = candidate.language === 'ru' ? 'ru' : 'en';
@@ -171,69 +192,224 @@ function updateTrayFromStatus(status) {
   updateTrayMenu();
 }
 
-function postJson(urlPath) {
+function requestBackendJson(urlPath, options = {}) {
   return new Promise((resolve, reject) => {
     if (!backendUrl) {
       reject(new Error('Backend is not ready.'));
       return;
     }
+    const method = String(options.method || 'GET').toUpperCase();
+    const bodyText = options.body === undefined ? null : JSON.stringify(options.body);
     const url = new URL(urlPath, backendUrl);
     const request = http.request({
-      method: 'POST',
+      method,
       hostname: url.hostname,
       port: url.port,
       path: url.pathname + url.search,
-      timeout: 2000,
+      timeout: options.timeout || 2000,
       headers: {
-        Authorization: `Bearer ${backendApiToken}`
+        Authorization: `Bearer ${backendApiToken}`,
+        ...(bodyText === null ? {} : {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(bodyText)
+        })
       }
     }, (response) => {
       const chunks = [];
       response.on('data', (chunk) => chunks.push(chunk));
       response.on('end', () => {
         const text = Buffer.concat(chunks).toString('utf8');
+        let payload = {};
         try {
-          resolve(text ? JSON.parse(text) : {});
+          payload = text ? JSON.parse(text) : {};
         } catch (_error) {
-          resolve({});
+          payload = { ok: false, error: `${method} ${urlPath} returned non-JSON response` };
         }
+        if ((response.statusCode || 500) >= 400 || payload.ok === false) {
+          const error = new Error(payload.error || `${method} ${urlPath} failed with HTTP ${response.statusCode}`);
+          error.status = response.statusCode;
+          error.payload = payload;
+          reject(error);
+          return;
+        }
+        resolve(payload);
       });
     });
     request.on('timeout', () => request.destroy(new Error('Request timed out.')));
     request.on('error', reject);
+    if (bodyText !== null) {
+      request.write(bodyText);
+    }
     request.end();
   });
 }
 
+function postJson(urlPath) {
+  return requestBackendJson(urlPath, { method: 'POST' });
+}
+
 function getJson(urlPath) {
-  return new Promise((resolve, reject) => {
-    if (!backendUrl) {
-      reject(new Error('Backend is not ready.'));
-      return;
+  return requestBackendJson(urlPath, { method: 'GET' });
+}
+
+function proxyError(code, message) {
+  const error = new Error(`${code}: ${message}`);
+  error.code = code;
+  return error;
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isLoopbackHostname(hostname) {
+  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1' || hostname === '[::1]';
+}
+
+function isTrustedRendererUrl(rawUrl) {
+  if (!rawUrl) {
+    return false;
+  }
+  let actual;
+  try {
+    actual = new URL(rawUrl);
+  } catch (_error) {
+    return false;
+  }
+
+  const expected = rendererUrl();
+  if (expected.type === 'file') {
+    const expectedFileUrl = new URL(pathToFileURL(expected.target).toString());
+    return actual.protocol === 'file:' && actual.pathname === expectedFileUrl.pathname;
+  }
+
+  if (!app.isPackaged && expected.type === 'url') {
+    let expectedUrl;
+    try {
+      expectedUrl = new URL(expected.target);
+    } catch (_error) {
+      return false;
     }
-    const url = new URL(urlPath, backendUrl);
-    const request = http.get({
-      hostname: url.hostname,
-      port: url.port,
-      path: url.pathname + url.search,
-      timeout: 2000,
-      headers: {
-        Authorization: `Bearer ${backendApiToken}`
-      }
-    }, (response) => {
-      const chunks = [];
-      response.on('data', (chunk) => chunks.push(chunk));
-      response.on('end', () => {
-        const text = Buffer.concat(chunks).toString('utf8');
-        try {
-          resolve(text ? JSON.parse(text) : {});
-        } catch (_error) {
-          resolve({});
-        }
-      });
-    });
-    request.on('timeout', () => request.destroy(new Error('Request timed out.')));
-    request.on('error', reject);
+    if (!['http:', 'https:'].includes(expectedUrl.protocol) || !isLoopbackHostname(expectedUrl.hostname)) {
+      return false;
+    }
+    return actual.origin === expectedUrl.origin;
+  }
+
+  return false;
+}
+
+function assertTrustedIpcSender(event) {
+  if (!mainWindow || !event || event.sender !== mainWindow.webContents) {
+    throw proxyError('forbidden_sender', 'IPC request did not originate from the main dashboard window.');
+  }
+  if (!event.senderFrame || event.senderFrame !== event.sender.mainFrame) {
+    throw proxyError('forbidden_frame', 'IPC backend proxy is restricted to the dashboard main frame.');
+  }
+  const senderUrl = event.senderFrame.url || event.sender.getURL();
+  if (!isTrustedRendererUrl(senderUrl)) {
+    throw proxyError('forbidden_renderer_url', 'IPC backend proxy is restricted to the trusted dashboard URL.');
+  }
+}
+
+function validateNoExtraRequestKeys(request) {
+  const allowedKeys = new Set(['op', 'params', 'body']);
+  for (const key of Object.keys(request)) {
+    if (key === 'headers') {
+      throw proxyError('invalid_headers', 'Renderer-supplied backend headers are not allowed.');
+    }
+    if (!allowedKeys.has(key)) {
+      throw proxyError('invalid_body', `Unsupported backend proxy field: ${key}`);
+    }
+  }
+}
+
+function appendBooleanParam(pathValue, params, name) {
+  if (!params || !(name in params)) {
+    return pathValue;
+  }
+  if (typeof params[name] !== 'boolean') {
+    throw proxyError('invalid_query', `${name} must be a boolean.`);
+  }
+  return params[name] ? `${pathValue}?${name}=1` : pathValue;
+}
+
+function appendIntegerParam(pathValue, params, name, min, max) {
+  if (!params || !(name in params)) {
+    return pathValue;
+  }
+  const value = params[name];
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw proxyError('invalid_query', `${name} must be an integer from ${min} to ${max}.`);
+  }
+  return `${pathValue}?${name}=${value}`;
+}
+
+function validateOperationParams(definition, params) {
+  const allowed = new Set([definition.booleanParam, definition.integerParam].filter(Boolean));
+  if (params === undefined) {
+    return {};
+  }
+  if (!isPlainObject(params)) {
+    throw proxyError('invalid_query', 'Backend proxy params must be an object.');
+  }
+  for (const key of Object.keys(params)) {
+    if (!allowed.has(key)) {
+      throw proxyError('invalid_query', `Unsupported backend proxy query parameter: ${key}`);
+    }
+  }
+  return params;
+}
+
+function validateOperationBody(definition, body) {
+  if (!definition.body) {
+    if (body !== undefined) {
+      throw proxyError('invalid_body', 'This backend operation does not accept a body.');
+    }
+    return undefined;
+  }
+  if (!isPlainObject(body) || !isPlainObject(body.config)) {
+    throw proxyError('invalid_body', 'Config updates must use a JSON object body with a config object.');
+  }
+  if (Buffer.byteLength(JSON.stringify(body), 'utf8') > MAX_PROXY_BODY_BYTES) {
+    throw proxyError('body_too_large', 'Backend proxy body exceeds 64 KiB.');
+  }
+  return body;
+}
+
+function resolveBackendOperation(request = {}) {
+  if (!isPlainObject(request)) {
+    throw proxyError('invalid_body', 'Backend proxy request must be an object.');
+  }
+  validateNoExtraRequestKeys(request);
+  const definition = BACKEND_OPERATION_ALLOWLIST[request.op];
+  if (!definition) {
+    throw proxyError('not_found', 'unknown backend operation');
+  }
+
+  const params = validateOperationParams(definition, request.params);
+  let urlPath = definition.path;
+  if (definition.booleanParam) {
+    urlPath = appendBooleanParam(urlPath, params, definition.booleanParam);
+  }
+  if (definition.integerParam) {
+    urlPath = appendIntegerParam(urlPath, params, definition.integerParam, definition.min, definition.max);
+  }
+
+  return {
+    method: definition.method,
+    path: urlPath,
+    body: validateOperationBody(definition, request.body)
+  };
+}
+
+async function proxyBackendRequest(event, request) {
+  assertTrustedIpcSender(event);
+  const operation = resolveBackendOperation(request);
+  return await requestBackendJson(operation.path, {
+    method: operation.method,
+    body: operation.body,
+    timeout: 5000
   });
 }
 
@@ -583,6 +759,152 @@ function stopTrayStatusPolling() {
   trayStatusTimer = null;
 }
 
+function sendLiveSnapshotEvent(payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  mainWindow.webContents.send('live:event', payload);
+}
+
+function parseSseFrame(frame) {
+  const lines = String(frame).split(/\r?\n/);
+  const data = [];
+  let eventName = 'message';
+  for (const line of lines) {
+    if (line.startsWith('event:')) {
+      eventName = line.slice(6).trim();
+    } else if (line.startsWith('data:')) {
+      data.push(line.slice(5).trimStart());
+    }
+  }
+  return { eventName, data: data.join('\n') };
+}
+
+function scheduleLiveStreamReconnect(message) {
+  if (liveStreamStopped) {
+    return;
+  }
+  if (liveStreamReconnectTimer) {
+    clearTimeout(liveStreamReconnectTimer);
+  }
+  sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'error', error: message } });
+  liveStreamReconnectTimer = setTimeout(() => {
+    liveStreamReconnectTimer = null;
+    openLiveStream();
+  }, LIVE_RECONNECT_DELAY_MS);
+  if (typeof liveStreamReconnectTimer.unref === 'function') {
+    liveStreamReconnectTimer.unref();
+  }
+}
+
+function handleLiveSseFrame(frame) {
+  const { eventName, data } = parseSseFrame(frame);
+  if (eventName === 'snapshot') {
+    try {
+      const snapshot = JSON.parse(data);
+      updateTrayFromStatus(snapshot.status);
+    } catch (_error) {
+      sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'error', error: 'malformed live frame' } });
+      return;
+    }
+  }
+  sendLiveSnapshotEvent({ eventName, data });
+}
+
+function stopLiveStream(options = {}) {
+  liveStreamStopped = true;
+  liveStreamBuffer = '';
+  if (liveStreamReconnectTimer) {
+    clearTimeout(liveStreamReconnectTimer);
+    liveStreamReconnectTimer = null;
+  }
+  if (liveStreamRequest) {
+    const request = liveStreamRequest;
+    liveStreamRequest = null;
+    request.destroy();
+  }
+  if (options.notify !== false) {
+    sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'paused', error: null } });
+  }
+}
+
+function openLiveStream() {
+  if (liveStreamStopped) {
+    return;
+  }
+  if (!backendUrl) {
+    scheduleLiveStreamReconnect('Backend is not ready.');
+    return;
+  }
+  if (liveStreamRequest) {
+    return;
+  }
+  const url = new URL('/api/live', backendUrl);
+  sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'connecting', error: null } });
+  const request = http.get({
+    hostname: url.hostname,
+    port: url.port,
+    path: url.pathname,
+    timeout: 0,
+    headers: {
+      Authorization: `Bearer ${backendApiToken}`
+    }
+  }, (response) => {
+    if (response.statusCode !== 200) {
+      response.resume();
+      liveStreamRequest = null;
+      const message = `live stream failed with HTTP ${response.statusCode}`;
+      if (response.statusCode === 401 || response.statusCode === 403) {
+        sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'error', error: message } });
+        return;
+      }
+      scheduleLiveStreamReconnect(message);
+      return;
+    }
+
+    sendLiveSnapshotEvent({ eventName: 'state', data: { connectionState: 'connected', error: null } });
+    response.setEncoding('utf8');
+    response.on('data', (chunk) => {
+      liveStreamBuffer += chunk;
+      const frames = liveStreamBuffer.split(/\r?\n\r?\n/);
+      liveStreamBuffer = frames.pop() || '';
+      for (const frame of frames) {
+        handleLiveSseFrame(frame);
+      }
+    });
+    response.on('end', () => {
+      liveStreamRequest = null;
+      liveStreamBuffer = '';
+      scheduleLiveStreamReconnect('live stream disconnected');
+    });
+  });
+  liveStreamRequest = request;
+  request.on('error', (error) => {
+    liveStreamRequest = null;
+    liveStreamBuffer = '';
+    if (!liveStreamStopped) {
+      scheduleLiveStreamReconnect(error instanceof Error ? error.message : 'live stream unavailable');
+    }
+  });
+}
+
+function startLiveStream(event) {
+  assertTrustedIpcSender(event);
+  if (liveStreamRequest && !liveStreamStopped) {
+    return { ok: true };
+  }
+  liveStreamStopped = false;
+  liveStreamBuffer = '';
+  openLiveStream();
+  return { ok: true };
+}
+
+function stopLiveStreamForRenderer(event) {
+  assertTrustedIpcSender(event);
+  stopLiveStream();
+  return { ok: true };
+}
+
 async function showMainWindow() {
   if (!mainWindow) {
     return;
@@ -601,7 +923,7 @@ async function showMainWindow() {
   mainWindow.setSkipTaskbar(false);
   mainWindow.show();
   mainWindow.focus();
-  mainWindow.webContents.send('tray:show-window', { backendUrl });
+  mainWindow.webContents.send('tray:show-window', {});
   refreshStatusOnce();
 }
 
@@ -682,6 +1004,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    stopLiveStream({ notify: false });
     if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.loadURL(rendererFailureUrl(`Renderer process exited: ${details.reason || 'unknown reason'}.`)).catch(() => {});
     }
@@ -703,6 +1026,7 @@ function createWindow() {
 // spawn but before the API is ready) so no orphaned Python process is left
 // holding the port. Detaches handlers first so it does not trigger auto-restart.
 function killBackendProcess() {
+  stopLiveStream({ notify: false });
   if (backendRestartTimer) {
     clearTimeout(backendRestartTimer);
     backendRestartTimer = null;
@@ -778,6 +1102,7 @@ async function quitApplication() {
     return;
   }
   isQuitting = true;
+  stopLiveStream({ notify: false });
   stopTrayStatusPolling();
   await gracefulShutdownBackend();
   app.quit();
@@ -795,8 +1120,9 @@ function registerIpcHandlers() {
     return;
   }
   ipcHandlersRegistered = true;
-  ipcMain.handle('backend:get-url', () => backendUrl);
-  ipcMain.handle('backend:get-token', () => backendApiToken);
+  ipcMain.handle('backend:request', proxyBackendRequest);
+  ipcMain.handle('live:start', startLiveStream);
+  ipcMain.handle('live:stop', stopLiveStreamForRenderer);
   ipcMain.handle('window:minimize', () => {
     if (mainWindow) {
       mainWindow.minimize();

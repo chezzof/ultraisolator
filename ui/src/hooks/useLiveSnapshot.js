@@ -1,7 +1,5 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
-import { resolveBackendToken, resolveBackendUrl } from '../utils/api.js';
 
-const RECONNECT_DELAY_MS = 1500;
 const MAX_NOTIFICATION_HISTORY = 80;
 
 function isRendererVisible() {
@@ -44,18 +42,11 @@ function appendNotification(current, notification) {
   };
 }
 
-function parseSseFrame(frame) {
-  const lines = String(frame).split(/\r?\n/);
-  const data = [];
-  let eventName = 'message';
-  for (const line of lines) {
-    if (line.startsWith('event:')) {
-      eventName = line.slice(6).trim();
-    } else if (line.startsWith('data:')) {
-      data.push(line.slice(5).trimStart());
-    }
+function decodeLivePayload(data) {
+  if (typeof data !== 'string') {
+    return data;
   }
-  return { eventName, data: data.join('\n') };
+  return JSON.parse(data);
 }
 
 export function useLiveSnapshot() {
@@ -91,6 +82,7 @@ export function useLiveSnapshot() {
 
   useEffect(() => {
     if (!visible) {
+      window.isolator?.stopLiveSnapshot?.();
       setState((current) => ({
         ...current,
         connectionState: 'paused',
@@ -99,30 +91,16 @@ export function useLiveSnapshot() {
       return undefined;
     }
 
-    let disposed = false;
-    let reconnectTimer = null;
-    let streamAbort = null;
-
-    const closeStream = () => {
-      if (streamAbort) {
-        streamAbort.abort();
-        streamAbort = null;
-      }
-      if (reconnectTimer) {
-        window.clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-    };
-
-    const scheduleReconnect = (message) => {
-      closeStream();
+    if (!window.isolator?.startLiveSnapshot || !window.isolator?.onLiveSnapshot) {
       setState((current) => ({
         ...current,
         connectionState: 'error',
-        error: message
+        error: 'live stream unavailable'
       }));
-      reconnectTimer = window.setTimeout(connect, RECONNECT_DELAY_MS);
-    };
+      return undefined;
+    }
+
+    let disposed = false;
 
     const handleSnapshot = (data) => {
       if (disposed) {
@@ -130,14 +108,15 @@ export function useLiveSnapshot() {
       }
       let snapshot;
       try {
-        snapshot = normalizeSnapshot(JSON.parse(data));
+        snapshot = normalizeSnapshot(decodeLivePayload(data));
       } catch (parseError) {
         console.error('[live] failed to parse snapshot frame', parseError);
-        scheduleReconnect('malformed live frame');
+        setState((current) => ({
+          ...current,
+          connectionState: 'error',
+          error: 'malformed live frame'
+        }));
         return;
-      }
-      if (window.isolator?.reportStatus) {
-        window.isolator.reportStatus(snapshot.status);
       }
       startTransition(() => {
         setState((current) => ({
@@ -156,7 +135,7 @@ export function useLiveSnapshot() {
       }
       let notification;
       try {
-        notification = JSON.parse(data);
+        notification = decodeLivePayload(data);
       } catch (parseError) {
         console.error('[live] failed to parse notification frame', parseError);
         setState((current) => ({
@@ -171,72 +150,41 @@ export function useLiveSnapshot() {
       });
     };
 
-    const connect = async () => {
-      closeStream();
-      setState((current) => ({
-        ...current,
-        connectionState: 'connecting',
-        error: null
-      }));
-
-      try {
-        const backendUrl = await resolveBackendUrl();
-        const backendToken = await resolveBackendToken();
-        if (disposed) {
-          return;
-        }
-
-        const controller = new AbortController();
-        streamAbort = controller;
-        const response = await fetch(`${backendUrl}/api/live`, {
-          signal: controller.signal,
-          headers: backendToken ? { Authorization: `Bearer ${backendToken}` } : {}
-        });
-        if (!response.ok || !response.body) {
-          throw new Error(`live stream failed with HTTP ${response.status}`);
-        }
+    const handleLiveEvent = (event) => {
+      if (disposed) {
+        return;
+      }
+      const eventName = event?.eventName || 'message';
+      if (eventName === 'state') {
         setState((current) => ({
           ...current,
-          connectionState: 'connected',
-          error: null
+          connectionState: event.data?.connectionState || current.connectionState,
+          error: event.data?.error || null
         }));
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        while (!disposed && streamAbort === controller) {
-          const { value, done } = await reader.read();
-          if (done) {
-            break;
-          }
-          buffer += decoder.decode(value, { stream: true });
-          const frames = buffer.split(/\r?\n\r?\n/);
-          buffer = frames.pop() || '';
-          for (const frame of frames) {
-            const { eventName, data } = parseSseFrame(frame);
-            if (eventName === 'snapshot') {
-              handleSnapshot(data);
-            } else if (eventName === 'notification') {
-              handleNotification(data);
-            }
-          }
-        }
-        if (!disposed && streamAbort === controller) {
-          throw new Error('live stream disconnected');
-        }
-      } catch (error) {
-        if (disposed || error?.name === 'AbortError') {
-          return;
-        }
-        scheduleReconnect(error instanceof Error ? error.message : 'live stream unavailable');
+      } else if (eventName === 'snapshot') {
+        handleSnapshot(event.data);
+      } else if (eventName === 'notification') {
+        handleNotification(event.data);
       }
     };
 
-    connect();
+    const removeLiveListener = window.isolator.onLiveSnapshot(handleLiveEvent);
+    window.isolator.startLiveSnapshot().catch((error) => {
+      if (!disposed) {
+        setState((current) => ({
+          ...current,
+          connectionState: 'error',
+          error: error instanceof Error ? error.message : 'live stream unavailable'
+        }));
+      }
+    });
 
     return () => {
       disposed = true;
-      closeStream();
+      if (typeof removeLiveListener === 'function') {
+        removeLiveListener();
+      }
+      window.isolator?.stopLiveSnapshot?.();
     };
   }, [visible]);
 

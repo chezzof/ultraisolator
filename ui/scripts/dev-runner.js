@@ -8,8 +8,6 @@ const DEFAULT_API_PORT = 8765;
 const rendererPort = Number(process.env.EII_RENDERER_PORT) || DEFAULT_RENDERER_PORT;
 const apiPort = Number(process.env.EII_API_PORT) || DEFAULT_API_PORT;
 const rendererUrl = process.env.EII_RENDERER_URL || `http://127.0.0.1:${rendererPort}`;
-const apiUrl = `http://127.0.0.1:${apiPort}`;
-const apiToken = process.env.EII_API_TOKEN || 'dev-local-token';
 const viteBin = path.join(UI_ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
 const electronCommand = path.join(UI_ROOT, 'node_modules', 'electron', 'dist', process.platform === 'win32' ? 'electron.exe' : 'electron');
 
@@ -97,13 +95,7 @@ async function main() {
     '--port',
     String(rendererPort),
     '--strictPort'
-  ], {
-    env: {
-      ...process.env,
-      VITE_API_BASE_URL: apiUrl,
-      VITE_API_TOKEN: apiToken
-    }
-  });
+  ]);
 
   await waitForHttp(rendererUrl);
 
@@ -117,7 +109,6 @@ async function main() {
       ...process.env,
       EII_RENDERER_URL: rendererUrl,
       EII_API_PORT: String(apiPort),
-      EII_API_TOKEN: apiToken,
       EII_BACKEND_LOG_STDIO: process.env.EII_BACKEND_LOG_STDIO || '1'
     }
   });
