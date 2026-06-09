@@ -1,0 +1,6 @@
+best_isolator.py text eol=lf
+config.json.example text eol=lf
+requirements.txt text eol=lf
+isolator/**/*.py text eol=lf
+server/**/*.py text eol=lf
+ui/backend-manifest.json text eol=lf

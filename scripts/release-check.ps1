@@ -102,8 +102,16 @@ Invoke-Step "Deterministic asset generation" {
   npm --prefix ui run build:assets
 }
 
+Invoke-Step "Backend manifest generation" {
+  npm --prefix ui run build:backend-manifest
+}
+
 Invoke-Step "Tracked asset drift check" {
   git diff --exit-code -- ui/assets
+}
+
+Invoke-Step "Tracked backend manifest drift check" {
+  git diff --exit-code -- ui/backend-manifest.json
 }
 
 Invoke-Step "UI smoke test" {
@@ -112,12 +120,16 @@ Invoke-Step "UI smoke test" {
 
 if (-not $SkipPackage) {
   $packageOutput = Join-Path $Root "ui/dist-packaged"
-  if (Test-Path -LiteralPath $packageOutput) {
-    Remove-Item -LiteralPath $packageOutput -Recurse -Force
+  Invoke-Step "Clean packaged output" {
+    npm --prefix ui run clean:packaged
   }
 
   Invoke-Step "Windows package build" {
     npm --prefix ui run build
+  }
+
+  Invoke-Step "Packaged runtime provenance check" {
+    npm --prefix ui run verify:packaged-runtime
   }
 
   $byproducts = @(
@@ -127,7 +139,7 @@ if (-not $SkipPackage) {
   )
   foreach ($item in $byproducts) {
     if (Test-Path -LiteralPath $item) {
-      Remove-Item -LiteralPath $item -Recurse -Force
+      node ui/scripts/clean-packaged-output.js $item
     }
   }
 

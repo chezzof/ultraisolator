@@ -1,9 +1,27 @@
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
+const BACKEND_MANIFEST_FILE = 'backend-manifest.json';
+const PACKAGED_PYTHON_DEV_OVERRIDE = 'EII_ALLOW_UNTRUSTED_PACKAGED_PYTHON';
+const DYNAMIC_BACKEND_STATE_FILES = new Set([
+  'config.json',
+  'ifeo_backup.json',
+  'jail_state.json',
+  'recovery_state.json'
+]);
+const IGNORED_BACKEND_FILE_EXTENSIONS = new Set(['.log', '.tmp', '.pyc', '.pyo']);
+const IGNORED_BACKEND_DIRECTORIES = new Set(['__pycache__', '.pytest_cache']);
+
 function backendRoot(app, projectRoot) {
   return app.isPackaged ? path.join(process.resourcesPath, 'backend') : projectRoot;
+}
+
+function backendManifestPath(appDir = __dirname) {
+  // In packaged builds this lives in the ASAR/app bundle, not under the mutable
+  // extraResources backend tree it verifies.
+  return path.join(appDir, BACKEND_MANIFEST_FILE);
 }
 
 function backendConfigPath(app, projectRoot) {
@@ -18,6 +36,222 @@ function backendConfigPath(app, projectRoot) {
 
 function resolvePythonCommand(env = process.env) {
   return env.EII_PYTHON || 'python';
+}
+
+function safeRealpathSync(target) {
+  try {
+    const realpath = fs.realpathSync.native || fs.realpathSync;
+    return realpath(target);
+  } catch (_error) {
+    return path.resolve(target);
+  }
+}
+
+function normalizeComparablePath(target) {
+  return path.resolve(target).replace(/[\\/]+$/, '').toLowerCase();
+}
+
+function isPathUnderTrustedRoot(target, trustedRoots = []) {
+  const normalizedTarget = normalizeComparablePath(target);
+  return trustedRoots.some((root) => {
+    if (!root) {
+      return false;
+    }
+    const normalizedRoot = normalizeComparablePath(root);
+    return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}${path.sep}`);
+  });
+}
+
+function defaultTrustedPythonRoots() {
+  const roots = [];
+  if (process.resourcesPath) {
+    roots.push(path.join(process.resourcesPath, 'python'));
+  }
+  if (process.platform === 'win32') {
+    const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
+    roots.push(path.join(programFiles, 'Esports Isolator PRO', 'python'));
+  }
+  return roots;
+}
+
+function aclGrantsStandardUserWrite(aclText) {
+  const riskyPrincipals = [
+    'everyone',
+    'authenticated users',
+    'builtin\\users',
+    'nt authority\\authenticated users',
+    'users',
+    's-1-1-0',
+    's-1-5-11',
+    's-1-5-32-545'
+  ];
+  return String(aclText || '').split(/\r?\n/).some((line) => {
+    const lower = line.toLowerCase();
+    if (lower.includes('(deny)') || /\bdeny\b/.test(lower)) {
+      return false;
+    }
+    const grantsWrite = /\(([^)]*\b(f|m|w|wd|ad|dc|wo)\b[^)]*)\)/i.test(line) ||
+      /\b(fullcontrol|modify|write|writedata|createfiles|appenddata|delete|takeownership|changepermissions)\b/i.test(line);
+    return grantsWrite && riskyPrincipals.some((principal) => lower.includes(principal));
+  });
+}
+
+function readWindowsAclText(target) {
+  const psScript = [
+    "$ErrorActionPreference = 'Stop'",
+    "$acl = Get-Acl -LiteralPath $args[0]",
+    "foreach ($ace in $acl.Access) {",
+    "  try { $sid = $ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value }",
+    "  catch { $sid = $ace.IdentityReference.Value }",
+    "  Write-Output (\"{0} {1} {2}\" -f $sid, $ace.AccessControlType, $ace.FileSystemRights)",
+    "}"
+  ].join('; ');
+  const psResult = spawnSync('powershell', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    psScript,
+    target
+  ], {
+    windowsHide: true,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  if (!psResult.error && psResult.status === 0) {
+    return `${psResult.stdout}\n${psResult.stderr}`;
+  }
+
+  const icaclsResult = spawnSync('icacls', [target], {
+    windowsHide: true,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  if (icaclsResult.error || icaclsResult.status !== 0) {
+    return null;
+  }
+  return `${icaclsResult.stdout}\n${icaclsResult.stderr}`;
+}
+
+function isPathWritableByStandardUsers(target) {
+  if (process.platform === 'win32') {
+    const aclText = readWindowsAclText(target);
+    if (aclText === null) {
+      return true;
+    }
+    return aclGrantsStandardUserWrite(aclText);
+  }
+
+  try {
+    const stat = fs.statSync(target);
+    return Boolean(stat.mode & 0o022);
+  } catch (_error) {
+    return true;
+  }
+}
+
+function assertNotWritableByStandardUsers(target, writableCheck, description = 'Packaged runtime path') {
+  const targets = [target];
+  try {
+    const stat = fs.statSync(target);
+    if (stat.isFile()) {
+      targets.push(path.dirname(target));
+    }
+  } catch (_error) {
+    targets.push(path.dirname(target));
+  }
+
+  for (const candidate of [...new Set(targets)]) {
+    if (writableCheck(candidate)) {
+      throw new Error(`${description} is writable by standard users: ${candidate}`);
+    }
+  }
+}
+
+function manifestAclPath(manifestPath) {
+  const marker = `${path.sep}app.asar`;
+  const markerIndex = manifestPath.toLowerCase().indexOf(marker);
+  if (markerIndex === -1) {
+    return manifestPath;
+  }
+  return manifestPath.slice(0, markerIndex + marker.length);
+}
+
+function validatePythonProvenance(options) {
+  const {
+    command,
+    trustedRoots = defaultTrustedPythonRoots(),
+    isPathWritableByStandardUsers: writableCheck = isPathWritableByStandardUsers
+  } = options || {};
+
+  if (!command || !path.isAbsolute(command)) {
+    throw new Error('Packaged Python runtime must be an absolute trusted path.');
+  }
+
+  const realCommand = safeRealpathSync(command);
+  if (!isPathUnderTrustedRoot(realCommand, trustedRoots)) {
+    throw new Error(
+      `Packaged EII_PYTHON is outside trusted Python roots; set ${PACKAGED_PYTHON_DEV_OVERRIDE}=1 only for non-production developer override diagnostics.`
+    );
+  }
+  if (!fs.existsSync(realCommand)) {
+    throw new Error(`Packaged Python runtime is missing: ${command}`);
+  }
+  const commandStat = fs.statSync(realCommand);
+  if (!commandStat.isFile()) {
+    throw new Error(`Packaged Python runtime must be an executable file: ${command}`);
+  }
+
+  assertNotWritableByStandardUsers(realCommand, writableCheck);
+  return realCommand;
+}
+
+function isProductionPackagedRuntime(app, env, explicitValue) {
+  if (typeof explicitValue === 'boolean') {
+    return explicitValue;
+  }
+  return Boolean(app && app.isPackaged);
+}
+
+function resolvePackagedPythonCommand(options = {}) {
+  const {
+    app = { isPackaged: true },
+    env = process.env,
+    isProduction,
+    trustedRoots = defaultTrustedPythonRoots(),
+    isPathWritableByStandardUsers: writableCheck = isPathWritableByStandardUsers,
+    bundledPythonPath = process.resourcesPath ? path.join(process.resourcesPath, 'python', 'python.exe') : ''
+  } = options;
+  const configuredPython = env.EII_PYTHON || '';
+  const production = isProductionPackagedRuntime(app, env, isProduction);
+  const devOverrideAllowed = env[PACKAGED_PYTHON_DEV_OVERRIDE] === '1' && !production;
+
+  if (configuredPython) {
+    if (devOverrideAllowed) {
+      if (!path.isAbsolute(configuredPython)) {
+        throw new Error('Packaged Python developer override must be an absolute path.');
+      }
+      return safeRealpathSync(configuredPython);
+    }
+    if (env[PACKAGED_PYTHON_DEV_OVERRIDE] === '1' && production) {
+      throw new Error('Packaged Python developer override is disabled in production builds.');
+    }
+    return validatePythonProvenance({
+      command: configuredPython,
+      trustedRoots,
+      isPathWritableByStandardUsers: writableCheck
+    });
+  }
+
+  if (!bundledPythonPath) {
+    throw new Error('Packaged builds require a bundled trusted Python runtime.');
+  }
+  return validatePythonProvenance({
+    command: bundledPythonPath,
+    trustedRoots,
+    isPathWritableByStandardUsers: writableCheck
+  });
 }
 
 function backendLogPath(app) {
@@ -100,14 +334,136 @@ async function preflightPythonRuntime(app, projectRoot, pythonCommand) {
   }
 }
 
+function toManifestPath(relativePath) {
+  return relativePath.split(path.sep).join('/');
+}
+
+function isIgnoredBackendPath(relativePath) {
+  const normalized = toManifestPath(relativePath);
+  const parts = normalized.split('/');
+  const basename = parts[parts.length - 1];
+  const extension = path.extname(basename).toLowerCase();
+  return parts.some((part) => IGNORED_BACKEND_DIRECTORIES.has(part)) ||
+    DYNAMIC_BACKEND_STATE_FILES.has(basename) ||
+    IGNORED_BACKEND_FILE_EXTENSIONS.has(extension) ||
+    basename.endsWith('.tmp');
+}
+
+function walkBackendFiles(root, current = root, output = []) {
+  for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+    const fullPath = path.join(current, entry.name);
+    const relativePath = toManifestPath(path.relative(root, fullPath));
+    if (isIgnoredBackendPath(relativePath)) {
+      continue;
+    }
+    if (entry.isSymbolicLink()) {
+      throw new Error(`Backend resource file is not listed in integrity manifest: ${relativePath}`);
+    } else if (entry.isDirectory()) {
+      walkBackendFiles(root, fullPath, output);
+    } else if (entry.isFile()) {
+      output.push(relativePath);
+    } else {
+      throw new Error(`Backend resource file is not listed in integrity manifest: ${relativePath}`);
+    }
+  }
+  return output;
+}
+
+function readBackendManifest(manifestPath) {
+  if (!fs.existsSync(manifestPath)) {
+    throw new Error(`Backend resource manifest is missing: ${manifestPath}`);
+  }
+  return validateBackendManifest(JSON.parse(fs.readFileSync(manifestPath, 'utf8')));
+}
+
+function validateBackendManifest(parsed) {
+  if (!parsed || parsed.version !== 1 || parsed.algorithm !== 'sha256' || !parsed.files || typeof parsed.files !== 'object') {
+    throw new Error('Backend resource manifest is invalid.');
+  }
+  return parsed;
+}
+
+function assertManifestPathIsTrusted(backendRootPath, manifestPath) {
+  const relative = path.relative(backendRootPath, manifestPath);
+  if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
+    throw new Error('Backend resource manifest must be stored in the trusted app bundle, not under mutable resources/backend.');
+  }
+}
+
+function validateManifestEntry(relativePath) {
+  if (path.isAbsolute(relativePath) || relativePath.includes('\\')) {
+    throw new Error(`Backend resource manifest path is invalid: ${relativePath}`);
+  }
+  const normalized = path.posix.normalize(relativePath);
+  if (normalized.startsWith('../') || normalized === '..') {
+    throw new Error(`Backend resource manifest path escapes backend root: ${relativePath}`);
+  }
+  return normalized;
+}
+
+function sha256File(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function verifyBackendResourceIntegrity(options = {}) {
+  const {
+    backendRoot: backendRootPath,
+    manifestPath = backendManifestPath(),
+    manifest,
+    isPathWritableByStandardUsers: writableCheck = isPathWritableByStandardUsers
+  } = options;
+
+  if (!backendRootPath || !fs.existsSync(backendRootPath)) {
+    throw new Error(`Backend resource root is missing: ${backendRootPath || 'unavailable'}`);
+  }
+  assertManifestPathIsTrusted(backendRootPath, manifestPath);
+  assertNotWritableByStandardUsers(manifestAclPath(manifestPath), writableCheck, 'Backend resource manifest path');
+  assertNotWritableByStandardUsers(backendRootPath, writableCheck);
+
+  const parsedManifest = manifest ? validateBackendManifest(manifest) : readBackendManifest(manifestPath);
+  const manifestFiles = new Map();
+  for (const [relativePath, expected] of Object.entries(parsedManifest.files)) {
+    const normalized = validateManifestEntry(relativePath);
+    if (typeof expected !== 'string' || !expected.startsWith('sha256-')) {
+      throw new Error(`Backend resource manifest hash is invalid for ${normalized}`);
+    }
+    manifestFiles.set(normalized, expected.slice('sha256-'.length));
+  }
+
+  for (const [relativePath, expectedHash] of manifestFiles.entries()) {
+    const fullPath = path.join(backendRootPath, ...relativePath.split('/'));
+    if (!fs.existsSync(fullPath)) {
+      throw new Error(`Backend resource listed in manifest is missing: ${relativePath}`);
+    }
+    const actualHash = sha256File(fullPath);
+    if (actualHash !== expectedHash) {
+      throw new Error(`Backend resource hash mismatch for ${relativePath}`);
+    }
+  }
+
+  for (const relativePath of walkBackendFiles(backendRootPath)) {
+    if (!manifestFiles.has(relativePath)) {
+      throw new Error(`Backend resource file is not listed in integrity manifest: ${relativePath}`);
+    }
+  }
+  return true;
+}
+
 module.exports = {
+  aclGrantsStandardUserWrite,
   appendBackendStartupLog,
   backendConfigPath,
   backendLogPath,
+  backendManifestPath,
   backendRoot,
   closeBackendLogStream,
   createBackendLogStream,
+  isPathUnderTrustedRoot,
+  isPathWritableByStandardUsers,
   preflightPythonRuntime,
+  resolvePackagedPythonCommand,
   resolvePythonCommand,
-  runPythonProbe
+  runPythonProbe,
+  validatePythonProvenance,
+  verifyBackendResourceIntegrity
 };

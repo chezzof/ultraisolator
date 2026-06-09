@@ -94,7 +94,7 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("backendStartupError = error instanceof Error ? error.message : String(error)", main)
         self.assertIn("appendBackendStartupLog(app, backendStartupError)", main)
         self.assertIn("backendStartupError", main[main.index("function rendererUrl"):])
-        self.assertIn("Python runtime check failed", main)
+        self.assertIn("Startup safety check failed", main)
 
     def test_preload_exposes_minimal_ipc_api(self):
         preload = (UI / "electron-preload.js").read_text(encoding="utf-8")
@@ -132,8 +132,10 @@ class ElectronShellContractTests(unittest.TestCase):
     def test_package_declares_windows_builder_targets_and_backend_resources(self):
         package = json.loads((UI / "package.json").read_text(encoding="utf-8"))
 
-        self.assertEqual("npm run build:renderer && npm run build:assets && electron-builder --win nsis portable", package["scripts"]["build"])
+        self.assertEqual("npm run clean:packaged && npm run build:renderer && npm run build:assets && npm run build:backend-manifest && electron-builder --win nsis portable && node scripts/harden-packaged-backend-acl.js dist-packaged/win-unpacked", package["scripts"]["build"])
         self.assertEqual("node scripts/generate-assets.js", package["scripts"]["build:assets"])
+        self.assertEqual("node scripts/generate-backend-manifest.js", package["scripts"]["build:backend-manifest"])
+        self.assertEqual("node scripts/verify-packaged-runtime.js", package["scripts"]["verify:packaged-runtime"])
         self.assertIn("electron-builder", package["devDependencies"])
         self.assertNotRegex(package["devDependencies"]["electron-builder"], r"^[~^>=<*]")
 
@@ -161,7 +163,8 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("backendRoot(app, PROJECT_ROOT)", main)
         self.assertIn("backendConfigPath(app, PROJECT_ROOT)", main)
         self.assertIn("!app.isPackaged && process.env.EII_RENDERER_URL", main)
-        self.assertIn("Packaged builds require EII_PYTHON", main)
+        self.assertIn("verifyBackendResourceIntegrity", main)
+        self.assertIn("resolvePackagedPythonCommand", main)
         self.assertIn("setWindowOpenHandler", main)
         self.assertIn("assets/tray-${state}.ico", main)
         self.assertIn("assets/icon.ico", main)
@@ -196,7 +199,7 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("npm run build", docs)
         self.assertIn("Python 3.12", docs)
         self.assertIn("psutil", docs)
-        self.assertIn("system Python", docs)
+        self.assertIn("allowlisted protected install root", docs)
         self.assertIn("NSIS", docs)
         self.assertIn("portable", docs)
         self.assertIn("Auto-updater", docs)

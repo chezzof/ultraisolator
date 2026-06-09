@@ -8,11 +8,14 @@ const path = require('path');
 const {
   appendBackendStartupLog,
   backendConfigPath,
+  backendManifestPath,
   backendRoot,
   closeBackendLogStream,
   createBackendLogStream,
   preflightPythonRuntime,
-  resolvePythonCommand
+  resolvePackagedPythonCommand,
+  resolvePythonCommand,
+  verifyBackendResourceIntegrity
 } = require('./backend-runtime');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -328,11 +331,11 @@ async function launchBackendProcess(port) {
   );
 
   if (app.isPackaged) {
-    const configuredPython = process.env.EII_PYTHON || '';
-    if (!configuredPython || !path.isAbsolute(configuredPython)) {
-      throw new Error('Packaged builds require EII_PYTHON to point at a trusted absolute Python 3.12+ interpreter path.');
-    }
-    const pythonCommand = fs.realpathSync(configuredPython);
+    verifyBackendResourceIntegrity({
+      backendRoot: root,
+      manifestPath: backendManifestPath(__dirname)
+    });
+    const pythonCommand = resolvePackagedPythonCommand({ app, env: process.env });
     await preflightPythonRuntime(app, PROJECT_ROOT, pythonCommand);
     return await spawnBackendOnce(pythonCommand, args, root, backendStdio);
   }
@@ -440,7 +443,7 @@ function rendererUrl() {
     return { type: 'url', target: process.env.EII_RENDERER_URL };
   }
   const startupMessage = backendStartupError
-    ? `Python runtime check failed: ${escapeHtml(backendStartupError)}`
+    ? `Startup safety check failed: ${escapeHtml(backendStartupError)}`
     : 'API bridge is running. React dashboard build is not installed yet.';
   if (backendStartupError) {
     const diagnostic = [

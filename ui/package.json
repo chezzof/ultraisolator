@@ -13,8 +13,11 @@
     "smoke": "node scripts/smoke-test.js",
     "build:renderer": "vite build",
     "build:assets": "node scripts/generate-assets.js",
-    "pack": "npm run build:renderer && npm run build:assets && electron-builder --dir",
-    "build": "npm run build:renderer && npm run build:assets && electron-builder --win nsis portable"
+    "build:backend-manifest": "node scripts/generate-backend-manifest.js",
+    "verify:packaged-runtime": "node scripts/verify-packaged-runtime.js",
+    "clean:packaged": "node scripts/clean-packaged-output.js",
+    "pack": "npm run clean:packaged && npm run build:renderer && npm run build:assets && npm run build:backend-manifest && electron-builder --dir && node scripts/harden-packaged-backend-acl.js dist-packaged/win-unpacked",
+    "build": "npm run clean:packaged && npm run build:renderer && npm run build:assets && npm run build:backend-manifest && electron-builder --win nsis portable && node scripts/harden-packaged-backend-acl.js dist-packaged/win-unpacked"
   },
   "dependencies": {
     "@carbon/icons-react": "11.80.0",
@@ -33,6 +36,7 @@
     "appId": "com.esportsisolator.pro",
     "productName": "Esports Isolator PRO",
     "asar": true,
+    "afterPack": "scripts/harden-packaged-backend-acl.js",
     "electronVersion": "42.2.0",
     "electronDist": "node_modules/electron/dist",
     "directories": {
@@ -41,6 +45,7 @@
     "files": [
       "electron-main.js",
       "backend-runtime.js",
+      "backend-manifest.json",
       "electron-preload.js",
       "dist/**/*",
       "assets/**/*",

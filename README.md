@@ -35,7 +35,7 @@ Esports Isolator PRO detects a running game, reserves cleaner CPU capacity for i
 
 | What a reviewer can verify | Evidence in this repository |
 |----------------------------|-----------------------------|
-| **Release readiness** | `scripts/release-check.ps1` runs Python tests, config dry-run, npm audit, renderer build, smoke test, package build, and checksum generation. |
+| **Release readiness** | `scripts/release-check.ps1` runs Python tests, config dry-run, npm audit, renderer build, backend manifest generation, smoke test, package build, packaged runtime provenance checks, and checksum generation. |
 | **Measured performance** | CS2 VProf benchmark shows avg FPS +9.8%, P95 spike -26.0%, client rendering spike -48.0%, and HUD spike -87.6%; source summary lives in `docs/benchmarks/cs2-vprof-summary.json`. |
 | **Safety boundary** | Windows-only, Administrator-scoped, anti-cheat-aware, protected process list, opt-in background jailing, and crash recovery. |
 | **OSS hygiene** | CI, issue templates, PR template, security policy, release checklist, reproducible build docs, and public submission notes. |
@@ -93,8 +93,9 @@ This project intentionally touches sensitive Windows controls. Read this before 
 - Windows 10/11 only.
 - Administrator is required for full CPU Sets, IFEO, power plan, timer, and process tuning behavior.
 - `enable_background_jailing` defaults to `false`; turn it on only after reading the config.
-- Packaged desktop builds require `EII_PYTHON` to point at a trusted absolute Python 3.12+ interpreter path.
-- Packaged desktop builds run a runtime preflight before backend launch and report Python version or `psutil` failures in the startup window.
+- Packaged desktop builds do not trust arbitrary inherited `EII_PYTHON` values in production. The packaged launcher accepts only an existing absolute interpreter path under an allowlisted protected install root, and fails closed if no bundled or protected interpreter is available.
+- Packaged desktop builds verify the backend resource integrity manifest before launch. The manifest lives in the trusted app bundle and checks files copied to `resources/backend`.
+- Packaged startup fails closed before Python is spawned if the interpreter path or `resources/backend` is standard-user writable, if backend hashes do not match, or if an executable/source backend file is missing from the manifest.
 - Use `anti_cheat_mode: "conservative"` for games with stricter anti-cheat stacks.
 - The tool does not download or execute remote code at runtime.
 - The localhost desktop API is protected by a per-launch bearer token passed through Electron IPC.
@@ -128,6 +129,7 @@ Useful UI checks:
 ```powershell
 npm --prefix ui run build:renderer
 npm --prefix ui run build:assets
+npm --prefix ui run build:backend-manifest
 npm --prefix ui run smoke
 ```
 
@@ -201,6 +203,7 @@ ui/
 python -m unittest discover -s tests -p "test_*.py" -v
 npm --prefix ui run build:renderer
 npm --prefix ui run build:assets
+npm --prefix ui run build:backend-manifest
 npm --prefix ui run smoke
 ```
 
@@ -208,6 +211,7 @@ Optional full package build:
 
 ```powershell
 npm --prefix ui run build
+npm --prefix ui run verify:packaged-runtime
 ```
 
 Release gate:

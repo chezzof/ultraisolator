@@ -453,9 +453,10 @@ class ReactFrontendContractTests(unittest.TestCase):
             "npm --prefix ui audit",
             "npm --prefix ui run smoke",
             "npm --prefix ui run build",
+            "npm --prefix ui run clean:packaged",
             "scripts/release-manifest.ps1",
             "git check-ignore",
-            "Remove-Item -LiteralPath $packageOutput -Recurse -Force",
+            "node ui/scripts/clean-packaged-output.js $item",
         ):
             self.assertIn(command, release_check)
 

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "algorithm": "sha256",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "files": {
+    "best_isolator.py": "sha256-8fe56627383754f80ec6d41412685f90ee873fd9e280dcc22dbaffe4d463d863",
+    "config.json.example": "sha256-ca78a66d06f1af911531f02e6d9cb9c86ba0a03b03b7ab564060285aa5e9240a",
+    "isolator/__init__.py": "sha256-a28d8a6e7fba89d542af0e16e1463449ddde27d81bdba575c69cb2ff920dc94f",
+    "isolator/app.py": "sha256-6a398b60dcdb42e4483499ef963ab51c3538e3b797de9179bc6893be16d01c45",
+    "isolator/base.py": "sha256-022039c2ca81b94f9276e7c39a70ddd3bacf36771e882a39a64008ff34032e19",
+    "isolator/cli.py": "sha256-981d6912d79e12953d7cc5a88c1ebb1b051db5438a750d764b66a569fbe3b881",
+    "isolator/discovery.py": "sha256-920e7c03b120b35c7702a063659ea998ff9d784eff85b3ba010a0bbf67869395",
+    "isolator/ifeo_power.py": "sha256-98f755f094d24cda5b2d8a3f9dcfca89d4ed69cb3f513e5652b588671db81722",
+    "isolator/recovery.py": "sha256-8eab8bc0a203248088969af87fd46a46e29d0e35ac0cda7099b61acd9d139134",
+    "isolator/runtime.py": "sha256-bd849e56a4fa734a00432ca91cfd1da0a64a702bee20acb6fcfb9e9db11412c3",
+    "isolator/topology.py": "sha256-12ed336742de91a95985a9d03e92244b14531fe6bd1d83dbe441cdd94f65847f",
+    "isolator/tuning.py": "sha256-a9a9830ed4c9d547eb3c0700c327fe8c12057974020453b8b64b9c22abb08380",
+    "isolator/winapi.py": "sha256-88f47c7968f53edbf0c9b6a5c593922d8f179240d4722b3d57083119f9dfd785",
+    "requirements.txt": "sha256-ce972e5602f1badf47b56ce597ebf4a3cbc516ca6c8979c95ee75c067d275840",
+    "server/__init__.py": "sha256-f12b9c51f47094ede1e5e0bfd7163ac57e362e89aed4089d45e28a1b9f243396",
+    "server/__main__.py": "sha256-38b0ae53c79c6eb6964414fee634bf8bd25b8fbe01e8edc61b09e08c7f91326d",
+    "server/analysis.py": "sha256-b2c57e8e1d3dd5f9a056a48bdfc576bbfb7019f3f5d5ab5adfac9a2e0a0cd57c",
+    "server/bridge.py": "sha256-3375f86c95b06ee1a19562cbf8612cb7b8a98513c5e477ac8bdfb1907564d59c",
+    "server/config_store.py": "sha256-29b8c56d5d97032371399a00aa7892b3a00d3dfcdf3d69225ee2d6596d048d9e",
+    "server/http_api.py": "sha256-198c03a91ce23691f16c5a87e6d3f6ee4e01485461be701f1f24195763c2d1a6",
+    "server/log_store.py": "sha256-665450331dbfd1a513e72bdf52d44119b2aa5b356227688ea02664ccab1e4d13",
+    "server/msi.py": "sha256-20af2dcf5d8c817449ee02f14ff05b958ed057acd7b575958850f376870c5686",
+    "server/readiness.py": "sha256-e47199af10621beb4ea14e785ecc7e9aa87d6d0a976d7491a3a01ac5d4523258"
+  }
+}
