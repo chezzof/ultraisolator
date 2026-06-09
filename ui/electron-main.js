@@ -5,6 +5,15 @@ const fs = require('fs');
 const http = require('http');
 const net = require('net');
 const path = require('path');
+const {
+  appendBackendStartupLog,
+  backendConfigPath,
+  backendRoot,
+  closeBackendLogStream,
+  createBackendLogStream,
+  preflightPythonRuntime,
+  resolvePythonCommand
+} = require('./backend-runtime');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_RENDERER_WIDTH = 1280;
@@ -39,48 +48,13 @@ let rendererLoaded = false;
 let rendererLoadPromise = null;
 let trayStatusTimer = null;
 let backendLogStream = null;
+let backendStartupError = null;
 let backendRestartCount = 0;
 let backendRestartTimer = null;
 let ipcHandlersRegistered = false;
 const MAX_BACKEND_RESTARTS = 4;
 const FALLBACK_PYTHON_COMMANDS = ['py', 'python3'];
 const backendApiToken = crypto.randomBytes(32).toString('hex');
-
-function backendRoot() {
-  return app.isPackaged ? path.join(process.resourcesPath, 'backend') : PROJECT_ROOT;
-}
-
-function backendConfigPath() {
-  return app.isPackaged ? path.join(app.getPath('userData'), 'config.json') : path.join(backendRoot(), 'config.json');
-}
-
-function backendLogPath() {
-  return path.join(app.getPath('userData'), 'backend.log');
-}
-
-function createBackendLogStream() {
-  if (!app.isPackaged) {
-    return null;
-  }
-  try {
-    const target = backendLogPath();
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    const stream = fs.createWriteStream(target, { flags: 'a' });
-    stream.write(`[${new Date().toISOString()}] starting backend\n`);
-    return stream;
-  } catch (error) {
-    console.error(error);
-    return null;
-  }
-}
-
-function closeBackendLogStream() {
-  if (!backendLogStream) {
-    return;
-  }
-  backendLogStream.end(`[${new Date().toISOString()}] backend exited\n`);
-  backendLogStream = null;
-}
 
 function normalizeAppSettings(candidate = {}) {
   const language = candidate.language === 'ru' ? 'ru' : 'en';
@@ -341,12 +315,12 @@ function spawnBackendOnce(pythonCommand, args, root, backendStdio) {
 }
 
 async function launchBackendProcess(port) {
-  const root = backendRoot();
+  const root = backendRoot(app, PROJECT_ROOT);
   const args = [
     '-m', 'server',
     '--host', '127.0.0.1',
     '--port', String(port),
-    '--config', backendConfigPath(),
+    '--config', backendConfigPath(app, PROJECT_ROOT),
     '--api-token', backendApiToken
   ];
   const backendStdio = app.isPackaged ? ['ignore', 'ignore', 'pipe'] : (
@@ -358,12 +332,14 @@ async function launchBackendProcess(port) {
     if (!configuredPython || !path.isAbsolute(configuredPython)) {
       throw new Error('Packaged builds require EII_PYTHON to point at a trusted absolute Python 3.12+ interpreter path.');
     }
-    return await spawnBackendOnce(fs.realpathSync(configuredPython), args, root, backendStdio);
+    const pythonCommand = fs.realpathSync(configuredPython);
+    await preflightPythonRuntime(app, PROJECT_ROOT, pythonCommand);
+    return await spawnBackendOnce(pythonCommand, args, root, backendStdio);
   }
 
   // In development, try the configured interpreter first, then fall back to
   // common Windows names ('py', 'python3') if the first spawn fails with ENOENT.
-  const candidates = [process.env.EII_PYTHON || 'python', ...FALLBACK_PYTHON_COMMANDS];
+  const candidates = [resolvePythonCommand(), ...FALLBACK_PYTHON_COMMANDS];
   const tried = new Set();
   let lastError = null;
   for (const pythonCommand of candidates) {
@@ -372,6 +348,7 @@ async function launchBackendProcess(port) {
     }
     tried.add(pythonCommand);
     try {
+      await preflightPythonRuntime(app, PROJECT_ROOT, pythonCommand);
       return await spawnBackendOnce(pythonCommand, args, root, backendStdio);
     } catch (error) {
       lastError = error;
@@ -386,7 +363,7 @@ async function launchBackendProcess(port) {
 
 function attachBackendHandlers() {
   backendProcess.on('exit', (code, signal) => {
-    closeBackendLogStream();
+    backendLogStream = closeBackendLogStream(backendLogStream);
     backendProcess = null;
     if (isQuitting) {
       return;
@@ -446,7 +423,7 @@ function attachBackendHandlers() {
 async function startBackend() {
   const port = Number(process.env.EII_API_PORT) || await findFreePort();
   backendUrl = `http://127.0.0.1:${port}`;
-  backendLogStream = createBackendLogStream();
+  backendLogStream = createBackendLogStream(app);
 
   // The actual spawn(pythonCommand, args, ...) call lives in spawnBackendOnce
   // so it can be retried across interpreter fallbacks with an error handler.
@@ -454,12 +431,29 @@ async function startBackend() {
   attachBackendHandlers();
 
   await waitForBackendReady(backendUrl);
+  backendStartupError = null;
   return backendUrl;
 }
 
 function rendererUrl() {
   if (!app.isPackaged && process.env.EII_RENDERER_URL) {
     return { type: 'url', target: process.env.EII_RENDERER_URL };
+  }
+  const startupMessage = backendStartupError
+    ? `Python runtime check failed: ${escapeHtml(backendStartupError)}`
+    : 'API bridge is running. React dashboard build is not installed yet.';
+  if (backendStartupError) {
+    const diagnostic = [
+      '<!doctype html><html><head><meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width,initial-scale=1">',
+      '<title>Esports Isolator PRO</title>',
+      '<style>body{margin:0;background:#0A0A0A;color:#E8E8EC;font-family:Inter,Segoe UI,sans-serif}',
+      '.shell{display:grid;place-items:center;min-height:100vh;padding:32px}.mark{color:#FF4757;font:700 20px Consolas,monospace;letter-spacing:.08em}',
+      '.sub{margin-top:10px;color:#E8E8EC;font-size:13px;max-width:720px;line-height:1.5}</style></head>',
+      '<body><main class="shell"><div><div class="mark">ESPORTS ISOLATOR PRO</div>',
+      `<div class="sub">${startupMessage}</div></div></main></body></html>`
+    ].join('');
+    return { type: 'url', target: `data:text/html;charset=utf-8,${encodeURIComponent(diagnostic)}` };
   }
   const distIndex = path.join(__dirname, 'dist', 'index.html');
   if (fs.existsSync(distIndex)) {
@@ -473,9 +467,18 @@ function rendererUrl() {
     '.shell{display:grid;place-items:center;min-height:100vh}.mark{color:#00D4AA;font:700 20px Consolas,monospace;letter-spacing:.08em}',
     '.sub{margin-top:10px;color:#AAAAAA;font-size:13px}</style></head>',
     '<body><main class="shell"><div><div class="mark">ESPORTS ISOLATOR PRO</div>',
-    '<div class="sub">API bridge is running. React dashboard build is not installed yet.</div></div></main></body></html>'
+    `<div class="sub">${startupMessage}</div></div></main></body></html>`
   ].join('');
   return { type: 'url', target: `data:text/html;charset=utf-8,${encodeURIComponent(fallback)}` };
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function rendererFailureUrl(detail) {
@@ -531,6 +534,10 @@ function ensureRendererLoaded() {
     ? mainWindow.loadFile(target.target, { hash: 'dashboard' })
     : mainWindow.loadURL(target.target))
     .then(async () => {
+      if (backendStartupError) {
+        rendererLoaded = true;
+        return;
+      }
       const mounted = await waitForRendererMount();
       if (!mounted) {
         await mainWindow.loadURL(rendererFailureUrl('React did not mount from the packaged renderer build. Run npm --prefix ui run build:renderer and check ui/dist/index.html asset paths.'));
@@ -658,7 +665,7 @@ function createWindow() {
       preload: path.join(__dirname, 'electron-preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   });
   mainWindow.removeMenu();
@@ -699,7 +706,7 @@ function killBackendProcess() {
   }
   const child = backendProcess;
   backendProcess = null;
-  closeBackendLogStream();
+  backendLogStream = closeBackendLogStream(backendLogStream);
   if (!child) {
     return;
   }
@@ -827,11 +834,17 @@ function retryBootstrap() {
 }
 
 function handleBootstrapFailure(error) {
-  console.error(`[bootstrap] startup failed: ${error && error.message ? error.message : error}`);
+  backendStartupError = error instanceof Error ? error.message : String(error);
+  console.error(`[bootstrap] startup failed: ${backendStartupError}`);
+  appendBackendStartupLog(app, backendStartupError);
   // Ensure no orphaned backend is left holding the port.
   killBackendProcess();
   stopTrayStatusPolling();
   setTrayErrorMenu();
+  if (!mainWindow) {
+    createWindow();
+  }
+  showMainWindow().catch(() => {});
 }
 
 async function bootstrap() {

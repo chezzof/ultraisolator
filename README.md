@@ -94,6 +94,7 @@ This project intentionally touches sensitive Windows controls. Read this before 
 - Administrator is required for full CPU Sets, IFEO, power plan, timer, and process tuning behavior.
 - `enable_background_jailing` defaults to `false`; turn it on only after reading the config.
 - Packaged desktop builds require `EII_PYTHON` to point at a trusted absolute Python 3.12+ interpreter path.
+- Packaged desktop builds run a runtime preflight before backend launch and report Python version or `psutil` failures in the startup window.
 - Use `anti_cheat_mode: "conservative"` for games with stricter anti-cheat stacks.
 - The tool does not download or execute remote code at runtime.
 - The localhost desktop API is protected by a per-launch bearer token passed through Electron IPC.

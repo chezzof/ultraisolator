@@ -15,6 +15,7 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertEqual("electron .", package["scripts"]["start"])
         self.assertIn("electron", package["devDependencies"])
         self.assertIn("react", package["dependencies"])
+        self.assertIn("backend-runtime.js", package["build"]["files"])
         for group_name in ("dependencies", "devDependencies"):
             for name, version in package[group_name].items():
                 self.assertNotRegex(version, r"^[~^>=<*]", f"{name} should be pinned")
@@ -54,13 +55,46 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("Authorization: `Bearer ${apiToken}`", smoke)
 
     def test_packaged_backend_stderr_is_logged_to_user_data(self):
+        runtime = (UI / "backend-runtime.js").read_text(encoding="utf-8")
         main = (UI / "electron-main.js").read_text(encoding="utf-8")
 
-        self.assertIn("backend.log", main)
-        self.assertIn("app.getPath('userData')", main)
-        self.assertIn("fs.createWriteStream", main)
+        self.assertIn("backend.log", runtime)
+        self.assertIn("app.getPath('userData')", runtime)
+        self.assertIn("fs.createWriteStream", runtime)
+        self.assertIn("backendLogStream = createBackendLogStream(app)", main)
         self.assertIn("app.isPackaged ? ['ignore', 'ignore', 'pipe']", main)
         self.assertIn("backendProcess.stderr.pipe", main)
+
+    def test_backend_runtime_module_owns_python_preflight_and_logs(self):
+        runtime = (UI / "backend-runtime.js").read_text(encoding="utf-8")
+        main = (UI / "electron-main.js").read_text(encoding="utf-8")
+
+        self.assertIn("function backendRoot", runtime)
+        self.assertIn("function backendConfigPath", runtime)
+        self.assertIn("function resolvePythonCommand", runtime)
+        self.assertIn("function createBackendLogStream", runtime)
+        self.assertIn("function appendBackendStartupLog", runtime)
+        self.assertIn("function closeBackendLogStream", runtime)
+        self.assertIn("function runPythonProbe", runtime)
+        self.assertIn("async function preflightPythonRuntime", runtime)
+        self.assertIn("--version", runtime)
+        self.assertIn("import psutil", runtime)
+        self.assertIn("Python 3.12 or newer", runtime)
+        self.assertIn("module.exports", runtime)
+
+        self.assertIn("require('./backend-runtime')", main)
+        self.assertNotIn("function runPythonProbe", main)
+        self.assertNotIn("async function preflightPythonRuntime", main)
+        self.assertIn("await preflightPythonRuntime(app, PROJECT_ROOT, pythonCommand)", main)
+
+    def test_main_records_backend_startup_error_for_renderer_fallback(self):
+        main = (UI / "electron-main.js").read_text(encoding="utf-8")
+
+        self.assertIn("let backendStartupError = null", main)
+        self.assertIn("backendStartupError = error instanceof Error ? error.message : String(error)", main)
+        self.assertIn("appendBackendStartupLog(app, backendStartupError)", main)
+        self.assertIn("backendStartupError", main[main.index("function rendererUrl"):])
+        self.assertIn("Python runtime check failed", main)
 
     def test_preload_exposes_minimal_ipc_api(self):
         preload = (UI / "electron-preload.js").read_text(encoding="utf-8")
@@ -73,6 +107,12 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("getAppSettings", preload)
         self.assertIn("updateAppSettings", preload)
         self.assertNotIn("ipcRenderer.send(", preload)
+
+    def test_electron_renderer_is_sandboxed(self):
+        main = (UI / "electron-main.js").read_text(encoding="utf-8")
+
+        self.assertIn("sandbox: true", main)
+        self.assertNotIn("sandbox: false", main)
 
     def test_main_persists_app_settings_and_login_item(self):
         main = (UI / "electron-main.js").read_text(encoding="utf-8")
@@ -111,12 +151,15 @@ class ElectronShellContractTests(unittest.TestCase):
         self.assertIn("backend/requirements.txt", resource_targets)
 
     def test_main_uses_packaged_backend_resources_and_static_tray_icons(self):
+        runtime = (UI / "backend-runtime.js").read_text(encoding="utf-8")
         main = (UI / "electron-main.js").read_text(encoding="utf-8")
 
-        self.assertIn("app.isPackaged", main)
-        self.assertIn("process.resourcesPath", main)
-        self.assertIn("backendRoot()", main)
-        self.assertIn("backendConfigPath()", main)
+        self.assertIn("app.isPackaged", runtime)
+        self.assertIn("process.resourcesPath", runtime)
+        self.assertIn("function backendRoot", runtime)
+        self.assertIn("function backendConfigPath", runtime)
+        self.assertIn("backendRoot(app, PROJECT_ROOT)", main)
+        self.assertIn("backendConfigPath(app, PROJECT_ROOT)", main)
         self.assertIn("!app.isPackaged && process.env.EII_RENDERER_URL", main)
         self.assertIn("Packaged builds require EII_PYTHON", main)
         self.assertIn("setWindowOpenHandler", main)

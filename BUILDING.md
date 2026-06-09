@@ -98,6 +98,7 @@ This keeps the engine/GUI separation intact: the Electron renderer can close to 
 
 - The app requests Administrator elevation because the engine needs privileged Windows tuning APIs.
 - A packaged app requires `EII_PYTHON` to point at a trusted absolute Python 3.12+ interpreter path; do not run the elevated app with an ambiguous or untrusted `PATH`.
+- Packaged builds run a runtime preflight before backend launch. Electron checks `python --version` and `import psutil`; failures are logged to `backend.log` and shown in the startup fallback window.
 - The installer is unsigned in this repository. Do not market unsigned artifacts as production-signed releases.
 - The project is Windows-only; Linux/macOS builds are not supported.
 - Background jailing remains opt-in in the default config.
