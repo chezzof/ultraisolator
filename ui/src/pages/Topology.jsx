@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Tag, Tile } from '@carbon/react';
-import { KpiCell } from '../components/KpiCell.jsx';
-import { PageHeading } from '../components/PageHeading.jsx';
-import { StatusTag } from '../components/StatusTag.jsx';
+import { ActionPanel } from '../components/cards/ActionPanel.jsx';
+import { MetricCard } from '../components/cards/MetricCard.jsx';
+import { PageHeader } from '../components/layout/PageHeader.jsx';
+import { SectionGrid } from '../components/layout/SectionGrid.jsx';
+import { StatusPill } from '../components/status/StatusPill.jsx';
+import { EmptyState } from '../components/states/EmptyState.jsx';
+import { ErrorState } from '../components/states/ErrorState.jsx';
 import { PARTITION_LABELS } from '../constants/topology.js';
 import { requestJson } from '../utils/api.js';
 import { formatCacheSize, formatCoreLabel, formatCpuSets } from '../utils/format.js';
 import { groupCoresByLlc } from '../utils/topology.js';
 import { useI18n } from '../i18n.jsx';
+
+const PARTITION_KEYS = ['game', 'background', 'housekeeping', 'unassigned'];
 
 const PARTITION_FALLBACK_LABELS = {
   game: 'Game',
@@ -22,6 +27,24 @@ const CORE_TYPE_FALLBACK_LABELS = {
   standard: 'Core',
   mixed: 'Mixed'
 };
+
+const PARTITION_TONES = {
+  game: 'success',
+  background: 'warning',
+  housekeeping: 'neutral',
+  unassigned: 'inactive'
+};
+
+const PARTITION_CLASSES = {
+  game: 'partition-game',
+  background: 'partition-background',
+  housekeeping: 'partition-housekeeping',
+  unassigned: 'partition-unassigned'
+};
+
+function countPartitionCores(cores, partition) {
+  return cores.filter((core) => (core.partition || 'unassigned') === partition).length;
+}
 
 export function TopologyPage({ live }) {
   const { t } = useI18n();
@@ -70,7 +93,23 @@ export function TopologyPage({ live }) {
   );
   const partitions = topology?.partitions || {};
   const summary = topology?.summary || {};
+  const isRunning = Boolean(status.running);
+  const gameMode = Boolean(status.game_mode);
+  const topologyAvailable = Boolean(topology?.available && cores.length);
+  const stateTone = topologyState.error ? 'danger' : topologyAvailable ? 'success' : topologyState.loading ? 'warning' : 'inactive';
+  const stateLabel = topologyState.error
+    ? t('topology.unavailable', 'Topology unavailable')
+    : topologyAvailable
+      ? t('topology.available', 'Topology available')
+      : topologyState.loading
+        ? t('topology.loading', 'Loading topology')
+        : t('topology.noData', 'No topology data');
+
   const partitionLabel = (partition) => t(`topology.partition.${partition}`, PARTITION_FALLBACK_LABELS[partition] || PARTITION_LABELS[partition] || partition);
+  const partitionCoreCount = (partition) => partitions[partition]?.core_count ?? countPartitionCores(cores, partition);
+  const partitionLogicalCount = (partition) => partitions[partition]?.logical_processor_count ?? cores
+    .filter((core) => (core.partition || 'unassigned') === partition)
+    .reduce((total, core) => total + (core.logical_processor_count || 0), 0);
   const coreTypeLabel = (core) => {
     const typeKey = core?.efficiency_type || 'standard';
     const type = t(`topology.coreType.${typeKey}`, CORE_TYPE_FALLBACK_LABELS[typeKey] || formatCoreLabel(core).replace(' / Parked', ''));
@@ -79,37 +118,88 @@ export function TopologyPage({ live }) {
 
   return (
     <section className="page topology-page" aria-labelledby="topology-title">
-      <PageHeading title="CPU Topology" titleKey="nav.topology" titleId="topology-title">
-        <StatusTag status={status} />
-        <Tag type={topology?.available ? 'green' : 'gray'}>
-          {topology?.available ? t('topology.available', 'Topology available') : t('topology.unavailable', 'Topology unavailable')}
-        </Tag>
-      </PageHeading>
+      <PageHeader
+        className="topology-page-header"
+        kicker={t('topology.readOnly', 'Read-only CPU map')}
+        title={t('nav.topology', 'CPU Topology')}
+        titleId="topology-title"
+        subtitle={summary.heterogeneous_efficiency ? t('topology.hybridLayout', 'Hybrid P-core / E-core layout') : t('topology.homogeneousLayout', 'Homogeneous core layout')}
+        actions={(
+          <>
+            <StatusPill tone={live.connectionState === 'connected' ? 'connected' : 'warning'} showDot>
+              {live.connectionState || 'unknown'}
+            </StatusPill>
+            <StatusPill tone={isRunning ? (gameMode ? 'success' : 'warning') : 'inactive'}>
+              {gameMode ? t('status.gameMode', 'Game mode') : (isRunning ? t('status.engineRunning', 'Engine running') : t('status.engineIdle', 'Engine idle'))}
+            </StatusPill>
+            <StatusPill tone={stateTone} showDot>
+              {stateLabel}
+            </StatusPill>
+          </>
+        )}
+      />
 
-      <div className="settings-toolbar topology-toolbar">
-        <div className="settings-path">
-          {topology?.refresh?.blocked_reason
-            ? t('topology.refreshBlocked', 'Refresh blocked: {{reason}}').replace('{{reason}}', topology.refresh.blocked_reason)
-            : t('topology.readOnly', 'Read-only CPU map')}
-        </div>
-        <div className="settings-actions">
+      <ActionPanel
+        className="topology-state-panel"
+        title={topology?.refresh?.blocked_reason
+          ? t('topology.refreshBlocked', 'Refresh blocked: {{reason}}').replace('{{reason}}', topology.refresh.blocked_reason)
+          : t('topology.readOnly', 'Read-only CPU map')}
+        detail={topologyState.error
+          ? t('topology.unavailable', 'Topology unavailable')
+          : `${summary.core_count ?? cores.length} ${t('topology.core', 'Core').toLowerCase()} / ${summary.logical_processor_count ?? 0} ${t('topology.logicalProcessorsLabel', 'Logical Processors').toLowerCase()}`}
+        actions={(
           <button type="button" onClick={() => loadTopology(true)} disabled={topologyState.refreshing}>
             {topologyState.refreshing ? t('common.refreshing', 'Refreshing') : t('common.refresh', 'Refresh')}
           </button>
-        </div>
-      </div>
+        )}
+      />
 
-      {topologyState.error ? <div className="action-error">{topologyState.error}</div> : null}
+      <SectionGrid className="topology-summary-grid" columns="repeat(4, minmax(0, 1fr))" ariaLabel="Topology summary">
+        <MetricCard
+          label={t('topology.totalCores', 'Total Cores')}
+          value={summary.core_count ?? cores.length}
+          detail={t('topology.logicalProcessors', '{{count}} logical processors').replace('{{count}}', summary.logical_processor_count ?? 0)}
+          highlight
+        />
+        <MetricCard
+          label={partitionLabel('game')}
+          value={partitionCoreCount('game')}
+          detail={t('topology.cpuSetsCount', '{{count}} CPU sets').replace('{{count}}', partitionLogicalCount('game'))}
+          tone="positive"
+        />
+        <MetricCard
+          label={partitionLabel('background')}
+          value={partitionCoreCount('background')}
+          detail={t('topology.cpuSetsCount', '{{count}} CPU sets').replace('{{count}}', partitionLogicalCount('background'))}
+          tone="warning"
+        />
+        <MetricCard
+          label={partitionLabel('housekeeping')}
+          value={partitionCoreCount('housekeeping')}
+          detail={t('topology.cpuSetsCount', '{{count}} CPU sets').replace('{{count}}', partitionLogicalCount('housekeeping'))}
+        />
+      </SectionGrid>
 
-      <div className="kpi-strip topology-summary-grid" aria-label="Topology summary">
-        <KpiCell label={t('topology.totalCores', 'Total Cores')} value={summary.core_count ?? cores.length} detail={t('topology.logicalProcessors', '{{count}} logical processors').replace('{{count}}', summary.logical_processor_count ?? 0)} highlight />
-        <KpiCell label={partitionLabel('game')} value={partitions.game?.core_count ?? 0} detail={t('topology.cpuSetsCount', '{{count}} CPU sets').replace('{{count}}', partitions.game?.logical_processor_count ?? 0)} tone="positive" />
-        <KpiCell label={partitionLabel('background')} value={partitions.background?.core_count ?? 0} detail={t('topology.cpuSetsCount', '{{count}} CPU sets').replace('{{count}}', partitions.background?.logical_processor_count ?? 0)} />
-        <KpiCell label={partitionLabel('housekeeping')} value={partitions.housekeeping?.core_count ?? 0} detail={t('topology.cpuSetsCount', '{{count}} CPU sets').replace('{{count}}', partitions.housekeeping?.logical_processor_count ?? 0)} />
-      </div>
+      <SectionGrid className="topology-legend-grid" columns="repeat(4, minmax(0, 1fr))" ariaLabel="Partition legend">
+        {PARTITION_KEYS.map((partition) => (
+          <div className={`topology-legend-card ${PARTITION_CLASSES[partition]}`} key={partition}>
+            <StatusPill tone={PARTITION_TONES[partition]} showDot>{partitionLabel(partition)}</StatusPill>
+            <strong>{partitionCoreCount(partition)}</strong>
+            <span>{t('topology.logicalProcessors', '{{count}} logical processors').replace('{{count}}', partitionLogicalCount(partition))}</span>
+          </div>
+        ))}
+      </SectionGrid>
+
+      {topologyState.error ? (
+        <ErrorState
+          className="topology-error-state"
+          title={t('topology.unavailable', 'Topology unavailable')}
+          detail={topologyState.error}
+        />
+      ) : null}
 
       <div className="topology-layout">
-        <Tile className="module-surface topology-map">
+        <section className="module-surface topology-map topology-core-map" aria-label={t('topology.map', 'CPU Map')}>
           <div className="topology-map-header">
             <div>
               <div className="module-title">{t('topology.map', 'CPU Map')}</div>
@@ -118,14 +208,18 @@ export function TopologyPage({ live }) {
               </div>
             </div>
             <div className="topology-legend" aria-label="Partition legend">
-              <span className="legend-item partition-game">{partitionLabel('game')}</span>
-              <span className="legend-item partition-background">{partitionLabel('background')}</span>
-              <span className="legend-item partition-housekeeping">{partitionLabel('housekeeping')}</span>
+              {PARTITION_KEYS.map((partition) => (
+                <span className={`legend-item ${PARTITION_CLASSES[partition]}`} key={partition}>{partitionLabel(partition)}</span>
+              ))}
             </div>
           </div>
 
           {topologyState.loading ? (
-            <div className="module-empty">{t('topology.loading', 'Loading topology')}</div>
+            <EmptyState
+              className="topology-loading-state"
+              title={t('topology.loading', 'Loading topology')}
+              detail={t('topology.readOnly', 'Read-only CPU map')}
+            />
           ) : cores.length ? (
             <div className="llc-group-list">
               {llcGroups.map((llc) => (
@@ -145,15 +239,22 @@ export function TopologyPage({ live }) {
                         <button
                           key={core.id}
                           type="button"
-                          className={`core-tile partition-${partition} ${core.efficiency_type || 'standard'}${core.parked ? ' parked' : ''}${selected ? ' selected' : ''}`}
+                          className={`core-tile ${PARTITION_CLASSES[partition] || PARTITION_CLASSES.unassigned} ${core.efficiency_type || 'standard'}${core.parked ? ' parked' : ''}${selected ? ' selected' : ''}`}
                           title={`${t('topology.core', 'Core')} ${core.core_index} / ${coreTypeLabel(core)} / ${translatedPartition}`}
                           aria-pressed={selected}
                           onClick={() => setSelectedCoreId(core.id)}
                         >
-                          <span className="core-index">C{core.core_index}</span>
-                          <span className="core-type">{coreTypeLabel(core)}</span>
+                          <span className="core-tile-head">
+                            <span className="core-index">C{core.core_index}</span>
+                            <span className={`core-selected-indicator${selected ? ' active' : ''}`} aria-hidden="true" />
+                          </span>
                           <span className="core-partition">{translatedPartition}</span>
-                          <span className="core-logicals">{t('topology.logicalProcessorsShort', '{{count}} LP').replace('{{count}}', core.logical_processor_count)}</span>
+                          <span className="core-type">{coreTypeLabel(core)}</span>
+                          <span className="core-tile-meta">
+                            <span>{t('topology.logicalProcessorsShort', '{{count}} LP').replace('{{count}}', core.logical_processor_count)}</span>
+                            <span>{t('topology.group', 'Group')} {core.group}</span>
+                            <span>LLC {core.llc_index}</span>
+                          </span>
                         </button>
                       );
                     })}
@@ -162,59 +263,71 @@ export function TopologyPage({ live }) {
               ))}
             </div>
           ) : (
-            <div className="module-empty">{t('topology.noData', 'No topology data')}</div>
+            <EmptyState
+              className="topology-empty-state"
+              title={t('topology.noData', 'No topology data')}
+              detail={t('dashboard.topologyStart', 'Start engine to populate topology')}
+            />
           )}
-        </Tile>
+        </section>
 
-        <Tile className="module-surface core-detail-panel">
-          <div className="module-title">{t('topology.coreDetails', 'Core Details')}</div>
+        <section className="module-surface core-detail-panel topology-selected-core" aria-label={t('topology.coreDetails', 'Core Details')}>
+          <div className="core-detail-heading">
+            <div>
+              <div className="module-title">{t('topology.coreDetails', 'Core Details')}</div>
+              <div className="topology-subtitle">
+                {selectedCore ? `${t('topology.core', 'Core')} C${selectedCore.core_index}` : t('topology.selectCore', 'Select a core')}
+              </div>
+            </div>
+            {selectedCore ? <StatusPill tone={PARTITION_TONES[selectedCore.partition || 'unassigned']}>{partitionLabel(selectedCore.partition || 'unassigned')}</StatusPill> : null}
+          </div>
           {selectedCore ? (
             <div className="core-detail-grid">
-              <div>
+              <div className="core-detail-section">
                 <span>{t('topology.core', 'Core')}</span>
                 <strong>C{selectedCore.core_index}</strong>
               </div>
-              <div>
+              <div className="core-detail-section">
                 <span>{t('topology.type', 'Type')}</span>
                 <strong>{coreTypeLabel(selectedCore)}</strong>
               </div>
-              <div>
-                <span>{t('topology.partition', 'Partition')}</span>
-                <strong>{partitionLabel(selectedCore.partition)}</strong>
-              </div>
-              <div>
+              <div className="core-detail-section">
                 <span>{t('topology.group', 'Group')}</span>
                 <strong>{selectedCore.group}</strong>
               </div>
-              <div>
+              <div className="core-detail-section">
                 <span>LLC</span>
                 <strong>{selectedCore.llc_index}</strong>
               </div>
-              <div>
+              <div className="core-detail-section">
                 <span>L3</span>
                 <strong>{formatCacheSize(selectedCore.l3_size_bytes)}</strong>
               </div>
-              <div>
+              <div className="core-detail-section">
                 <span>{t('topology.efficiency', 'Efficiency')}</span>
                 <strong>{selectedCore.efficiency_class}</strong>
               </div>
-              <div>
+              <div className="core-detail-section">
                 <span>{t('topology.status', 'Status')}</span>
                 <strong>{selectedCore.parked ? t('topology.parked', 'Parked') : t('dashboard.active', 'Active')}</strong>
               </div>
-              <div className="wide">
-                <span>{t('topology.cpuSets', 'CPU Sets')}</span>
-                <strong>{formatCpuSets(selectedCore.cpu_set_ids)}</strong>
-              </div>
-              <div className="wide">
+              <div className="core-detail-section">
                 <span>{t('topology.logicalProcessorsLabel', 'Logical Processors')}</span>
                 <strong>{(selectedCore.logical_indices || []).join(', ') || t('common.none', 'None')}</strong>
               </div>
+              <div className="core-detail-section wide">
+                <span>{t('topology.cpuSets', 'CPU Sets')}</span>
+                <strong>{formatCpuSets(selectedCore.cpu_set_ids)}</strong>
+              </div>
             </div>
           ) : (
-            <div className="module-empty">{t('topology.selectCore', 'Select a core')}</div>
+            <EmptyState
+              className="core-detail-empty"
+              title={t('topology.selectCore', 'Select a core')}
+              detail={t('topology.noData', 'No topology data')}
+            />
           )}
-        </Tile>
+        </section>
       </div>
     </section>
   );
