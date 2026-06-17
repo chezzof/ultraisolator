@@ -68,6 +68,84 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn("from './pages/Topology.jsx'", app)
         self.assertIn("from './components/ErrorBoundary.jsx'", app)
 
+    def test_shared_ui_design_foundation_exists(self):
+        expected_files = (
+            "styles/tokens.css",
+            "components/layout/PageHeader.jsx",
+            "components/layout/SectionGrid.jsx",
+            "components/cards/MetricCard.jsx",
+            "components/cards/ActionPanel.jsx",
+            "components/status/StatusPill.jsx",
+            "components/states/EmptyState.jsx",
+            "components/states/ErrorState.jsx",
+        )
+        for relative_path in expected_files:
+            with self.subTest(path=relative_path):
+                self.assertTrue((SRC / relative_path).exists(), f"{relative_path} is missing")
+
+    def test_design_tokens_define_surfaces_spacing_type_and_status_colors(self):
+        tokens = (SRC / "styles" / "tokens.css").read_text(encoding="utf-8")
+
+        for token in (
+            "--eii-color-bg",
+            "--eii-color-surface",
+            "--eii-color-surface-raised",
+            "--eii-color-border",
+            "--eii-color-accent",
+            "--eii-color-success",
+            "--eii-color-warning",
+            "--eii-color-danger",
+            "--eii-color-info",
+            "--eii-font-ui",
+            "--eii-font-mono",
+            "--eii-space-1",
+            "--eii-space-2",
+            "--eii-space-3",
+            "--eii-space-4",
+            "--eii-space-5",
+            "--eii-space-6",
+            "--eii-radius-sm",
+            "--eii-radius-md",
+        ):
+            self.assertIn(token, tokens)
+
+    def test_shared_primitives_are_presentational_and_token_based(self):
+        component_paths = (
+            SRC / "components" / "layout" / "PageHeader.jsx",
+            SRC / "components" / "layout" / "SectionGrid.jsx",
+            SRC / "components" / "cards" / "MetricCard.jsx",
+            SRC / "components" / "cards" / "ActionPanel.jsx",
+            SRC / "components" / "status" / "StatusPill.jsx",
+            SRC / "components" / "states" / "EmptyState.jsx",
+            SRC / "components" / "states" / "ErrorState.jsx",
+        )
+
+        for path in component_paths:
+            with self.subTest(path=path.name):
+                source = path.read_text(encoding="utf-8")
+                self.assertNotIn("requestJson", source)
+                self.assertNotIn("window.isolator", source)
+                self.assertNotIn("fetch(", source)
+
+        status_pill = (SRC / "components" / "status" / "StatusPill.jsx").read_text(encoding="utf-8")
+        for tone in ("neutral", "connected", "success", "warning", "danger", "inactive"):
+            self.assertIn(tone, status_pill)
+
+        metric_card = (SRC / "components" / "cards" / "MetricCard.jsx").read_text(encoding="utf-8")
+        self.assertIn("metric-card", metric_card)
+        self.assertIn("metric-card-value", metric_card)
+
+    def test_existing_low_risk_wrappers_use_shared_primitives(self):
+        page_heading = (SRC / "components" / "PageHeading.jsx").read_text(encoding="utf-8")
+        status_tag = (SRC / "components" / "StatusTag.jsx").read_text(encoding="utf-8")
+        kpi_cell = (SRC / "components" / "KpiCell.jsx").read_text(encoding="utf-8")
+        main = (SRC / "main.jsx").read_text(encoding="utf-8")
+
+        self.assertIn("./layout/PageHeader.jsx", page_heading)
+        self.assertIn("./status/StatusPill.jsx", status_tag)
+        self.assertIn("./cards/MetricCard.jsx", kpi_cell)
+        self.assertIn("./styles/tokens.css", main)
+
     def test_dashboard_has_live_kpi_status_panel_and_quick_actions(self):
         dashboard = (SRC / "pages" / "Dashboard.jsx").read_text(encoding="utf-8")
         lifecycle = (SRC / "utils" / "lifecycle.js").read_text(encoding="utf-8")
