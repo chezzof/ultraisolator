@@ -1,10 +1,10 @@
 # Codex for OSS Submission Pack
 
-Use this after `v1.1.1` is published from the green default branch.
+Use this after the first public `chezzof/ultraisolator` release is published from the green default branch.
 
 ## Repository URL
 
-https://github.com/leggapattern01-dot/ultraisolator
+https://github.com/chezzof/ultraisolator
 
 ## Project Justification
 
@@ -20,7 +20,7 @@ I would use API credits to add safe local analysis workflows: explain logs, summ
 - `scripts/release-check.ps1` covering tests, dry-run, npm audit, renderer build, smoke test, package build, checksums, and public-surface checks.
 - CS2 VProf benchmark in `benchmark-results-hud.html` with structured summary in `docs/benchmarks/cs2-vprof-summary.json`.
 - Screenshots under `docs/screenshots`.
-- Release notes and checksum manifest for `v1.1.1`.
+- Release notes template and checksum manifest workflow for the first public release.
 - Safety docs: `SECURITY.md`, `BUILDING.md`, `docs/release-readiness.md`, and `docs/oss-launch-checklist.md`.
 
 ## Outreach Boundary

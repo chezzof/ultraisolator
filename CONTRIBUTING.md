@@ -7,7 +7,7 @@ This project changes Windows process scheduling behavior, so contributions need 
 ## Getting started
 
 ```powershell
-git clone https://github.com/leggapattern01-dot/ultraisolator.git
+git clone https://github.com/chezzof/ultraisolator.git
 cd ultraisolator
 python -m pip install -r requirements.txt
 copy config.json.example config.json

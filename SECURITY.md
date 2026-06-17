@@ -12,7 +12,7 @@ Esports Isolator PRO runs with **Administrator privileges** and modifies process
 
 ## Reporting a vulnerability
 
-If you discover a security issue, please do not open a public issue. Open a [GitHub Security Advisory](https://github.com/leggapattern01-dot/ultraisolator/security/advisories/new) or contact the repository owner privately through GitHub.
+If you discover a security issue, please do not open a public issue. Open a [GitHub Security Advisory](https://github.com/chezzof/ultraisolator/security/advisories/new) or contact the repository owner privately through GitHub.
 
 We will acknowledge receipt within 72 hours and aim to release a fix within 14 days.
 
