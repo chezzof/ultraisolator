@@ -17,6 +17,7 @@ import { EMPTY_APP_PROFILE, parseListValue, toEditableConfig, validateConfigDraf
 const SETTINGS_RISK_GROUPS = [
   {
     id: 'game-detection',
+    i18nKey: 'gameDetection',
     title: 'Game detection',
     tone: 'neutral',
     badge: 'Safe',
@@ -25,6 +26,7 @@ const SETTINGS_RISK_GROUPS = [
   },
   {
     id: 'safe-basic',
+    i18nKey: 'safeBasic',
     title: 'Safe/basic behavior',
     tone: 'connected',
     badge: 'Basic',
@@ -33,6 +35,7 @@ const SETTINGS_RISK_GROUPS = [
   },
   {
     id: 'performance-tuning',
+    i18nKey: 'performance',
     title: 'Performance tuning',
     tone: 'warning',
     badge: 'Caution',
@@ -41,6 +44,7 @@ const SETTINGS_RISK_GROUPS = [
   },
   {
     id: 'anti-cheat-protection',
+    i18nKey: 'protection',
     title: 'Anti-cheat and protection',
     tone: 'warning',
     badge: 'Safety',
@@ -49,6 +53,7 @@ const SETTINGS_RISK_GROUPS = [
   },
   {
     id: 'advanced-background-jailing',
+    i18nKey: 'advancedJailing',
     title: 'Advanced background jailing',
     tone: 'danger',
     badge: 'Advanced',
@@ -57,15 +62,18 @@ const SETTINGS_RISK_GROUPS = [
   }
 ];
 
+const APP_PROFILES_RISK_GROUP = {
+  id: 'app-profiles',
+  i18nKey: 'appProfiles',
+  title: 'App profiles / custom paths',
+  tone: 'warning',
+  badge: 'Advanced',
+  detail: 'Per-app overrides and custom executable paths load after the backend config is available.'
+};
+
 const SETTINGS_PLACEHOLDER_GROUPS = [
   ...SETTINGS_RISK_GROUPS,
-  {
-    id: 'app-profiles',
-    title: 'App profiles / custom paths',
-    tone: 'warning',
-    badge: 'Advanced',
-    detail: 'Per-app overrides and custom executable paths load after the backend config is available.'
-  }
+  APP_PROFILES_RISK_GROUP
 ];
 
 function displayConfigPath(configPath) {
@@ -299,11 +307,11 @@ export function SettingsPage({ live }) {
     <div className="settings-risk-header">
       <div>
         <h2 id={`settings-${section.id}`} className="module-title">
-          {t(`settings.risk.${section.id}.title`, section.title)}
+          {t(`settings.risk.${section.i18nKey || section.id}.title`, section.title)}
         </h2>
-        <div className="settings-risk-detail">{t(`settings.risk.${section.id}.detail`, section.detail)}</div>
+        <div className="settings-risk-detail">{t(`settings.risk.${section.i18nKey || section.id}.detail`, section.detail)}</div>
       </div>
-      <StatusPill tone={section.tone}>{t(`settings.risk.${section.id}.badge`, section.badge)}</StatusPill>
+      <StatusPill tone={section.tone}>{t(`settings.risk.${section.i18nKey || section.id}.badge`, section.badge)}</StatusPill>
     </div>
   );
 
@@ -451,12 +459,9 @@ export function SettingsPage({ live }) {
             </section>
 
             {schema.app_profiles ? (
-              <section className="settings-section settings-risk-section settings-app-profiles profiles-editor" aria-labelledby="settings-profiles-title">
+              <section className="settings-section settings-risk-section settings-app-profiles profiles-editor" aria-labelledby="settings-app-profiles">
                 <div className="profiles-header">
-                  <div>
-                    <h2 id="settings-profiles-title" className="module-title">{t('settings.profilesRiskTitle', 'App profiles / custom paths')}</h2>
-                    <div className="profiles-subtitle">{t('settings.profilesDetail', 'Per-App Profiles. Manual overrides by executable name. Protected system and anti-cheat processes stay guarded.')}</div>
-                  </div>
+                  {renderRiskHeader(APP_PROFILES_RISK_GROUP)}
                   <button type="button" onClick={addProfile}>{t('settings.addProfile', 'Add profile')}</button>
                 </div>
                 {(draft.app_profiles || []).length === 0 ? (
