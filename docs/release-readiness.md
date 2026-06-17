@@ -4,6 +4,8 @@ This document defines the hypotheses that must hold before Esports Isolator PRO 
 
 The release is blocked until `scripts/release-check.ps1` passes.
 
+The first public release should use the version in `ui/package.json` as the artifact source of truth. Do not publish a GitHub Release from this documentation PR; use it to prepare the release narrative and checklist, then cut the release only after the final artifact gate is green.
+
 ## Release Model
 
 Current production target:
@@ -11,8 +13,27 @@ Current production target:
 - Windows-only source release with reproducible local NSIS and portable builds.
 - Unsigned installer is allowed only when release notes clearly state the code-signing limitation.
 - A trusted absolute `EII_PYTHON` interpreter is required for packaged desktop builds.
+- Administrator elevation is required for full CPU Sets, IFEO, power plan, timer, and process tuning behavior.
 - Background jailing remains opt-in.
 - No runtime API or config schema changes are required for this readiness pass.
+
+## Required Release Gate
+
+Run the complete gate before publishing or sharing artifacts:
+
+```powershell
+npm --prefix ui audit
+python -m unittest discover -s tests -p "test_*.py" -v
+powershell -ExecutionPolicy Bypass -File scripts\verify.ps1
+npm --prefix ui run build:renderer
+npm --prefix ui run smoke
+npm --prefix ui run build
+npm --prefix ui run verify:packaged-runtime
+powershell -ExecutionPolicy Bypass -File scripts\release-check.ps1
+git diff --check
+```
+
+The release gate must create NSIS and portable artifacts under `ui/dist-packaged`, generate `SHA256SUMS.txt`, and leave no tracked generated-file drift.
 
 ## Hypotheses and Tests
 
@@ -39,6 +60,7 @@ Run these checks after the automated gate:
 - Confirm `enable_background_jailing` remains disabled in `config.json.example`.
 - Confirm no local `config.json`, logs, package artifacts, or temporary QA files are staged.
 - Confirm `SHA256SUMS.txt` is uploaded with any public binary artifacts.
+- Confirm the Git tag, release title, and artifact version match the chosen first public release version.
 - If sharing artifacts publicly, test the installer and portable executable on a clean Windows user profile with `EII_PYTHON` pointing at a trusted absolute Python 3.12+ interpreter.
 
 ## Known Non-Blocking Build Warning
@@ -58,6 +80,7 @@ Go:
 - `powershell -File scripts/release-check.ps1` passes.
 - Manual release review finds no stale screenshots, misleading claims, or staged local artifacts.
 - Release notes disclose unsigned artifacts and trusted absolute `EII_PYTHON` requirement.
+- Release notes disclose Windows-only support, Administrator requirement, anti-cheat compatibility boundary, and opt-in background jailing.
 - Release artifacts include `SHA256SUMS.txt`.
 
 No-go:

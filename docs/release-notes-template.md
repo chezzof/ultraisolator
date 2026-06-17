@@ -1,17 +1,19 @@
-# Esports Isolator PRO 1.1.1 Release Notes Template
+# Esports Isolator PRO First Public Release Notes Template
 
 Use this template when publishing a GitHub release.
+
+Release tag: `v<ui/package.json version>`.
 
 ## Summary
 
 Esports Isolator PRO is a Windows-only process isolation tool for competitive games. It detects configured or discovered games, applies reversible CPU/process/power tuning, and restores the system after the session ends.
 
-This patch release hardens the elevated desktop security boundary before broader public distribution.
+This first public release candidate packages the current security-hardening baseline for source plus reproducible local Windows builds.
 
 ## Artifacts
 
-- `Esports.Isolator.PRO.Setup.1.1.1.exe`
-- `Esports-Isolator-PRO-1.1.1-portable.exe`
+- `Esports Isolator PRO Setup <version>.exe`
+- `Esports-Isolator-PRO-<version>-portable.exe`
 - `SHA256SUMS.txt`
 
 Generate artifacts and checksums with:
@@ -37,6 +39,7 @@ Expected gate coverage:
 - Deterministic asset generation.
 - UI smoke test.
 - Windows NSIS and portable package build.
+- Packaged runtime provenance verification.
 - SHA256 checksum manifest.
 - Public docs and screenshot presence checks.
 - Local config/log/recovery/package ignore checks.
@@ -51,7 +54,9 @@ Expected gate coverage:
 
 - The installer is not code-signed in this repository. Windows SmartScreen may warn on downloaded artifacts.
 - Background jailing remains opt-in.
-- The desktop localhost API is protected by a per-launch token; do not expose or proxy it to other users.
+- The desktop localhost API token is owned by Electron main; the renderer uses allowlisted IPC proxy operations and never receives the raw token.
+- IFEO and power recovery state is stored as authenticated protected state and fails closed if tampered.
+- Packaged startup verifies backend resource integrity and protected ACL assumptions before launching Python.
 - Run the elevated packaged app only with a trusted Python interpreter configured through absolute `EII_PYTHON`.
 - Do not use this project to bypass, disable, or tamper with anti-cheat software.
 - If a game or anti-cheat blocks a tuning operation, treat that as a compatibility boundary.
