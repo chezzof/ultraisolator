@@ -13,9 +13,9 @@ Use this checklist before submitting Esports Isolator PRO to Codex for OSS or sh
 ## Release Story
 
 - Use source plus reproducible local build as the public release model.
-- Publish the security-hardening public release as `v1.1.1`; `v1.1.0` is the public OSS polish baseline.
+- Publish the first security-hardening public release only after the release gate is green on `chezzof/ultraisolator`.
 - Do not claim a signed installer unless code signing is actually configured.
-- Mention that packaged builds require system Python.
+- Mention that packaged builds require a trusted absolute Python interpreter path.
 - Include Administrator and anti-cheat cautions in release notes.
 
 ## Demo Assets

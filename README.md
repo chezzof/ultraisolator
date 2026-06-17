@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/leggapattern01-dot/ultraisolator/releases/latest">
+  <a href="https://github.com/chezzof/ultraisolator">
     <img src="docs/banner.svg" alt="Esports Isolator PRO - Windows process isolation and frame-time stability for competitive games" width="100%">
   </a>
 </p>
@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/leggapattern01-dot/ultraisolator/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/leggapattern01-dot/ultraisolator/actions/workflows/tests.yml/badge.svg"></a>
-  <a href="https://github.com/leggapattern01-dot/ultraisolator/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/leggapattern01-dot/ultraisolator?sort=semver"></a>
+  <a href="https://github.com/chezzof/ultraisolator/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/chezzof/ultraisolator/actions/workflows/tests.yml/badge.svg"></a>
+  <a href="https://github.com/chezzof/ultraisolator/releases"><img alt="Release" src="https://img.shields.io/badge/release-not%20published-lightgrey"></a>
   <a href="https://www.python.org/"><img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-blue"></a>
   <a href="ui"><img alt="Electron + React desktop UI" src="https://img.shields.io/badge/desktop-Electron%20%2B%20React-2f6f7d"></a>
   <img alt="Windows 10/11" src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows">
@@ -22,7 +22,7 @@
 <p align="center">
   <a href="#quick-start"><strong>Quick Start</strong></a>
   &nbsp;|&nbsp;
-  <a href="https://github.com/leggapattern01-dot/ultraisolator/releases/latest"><strong>Download v1.1.1</strong></a>
+  <a href="https://github.com/chezzof/ultraisolator/releases"><strong>Releases</strong></a>
   &nbsp;|&nbsp;
   <a href="benchmark-results-hud.html"><strong>Benchmark Report</strong></a>
   &nbsp;|&nbsp;
@@ -105,7 +105,7 @@ This project intentionally touches sensitive Windows controls. Read this before 
 ## Quick Start
 
 ```powershell
-git clone https://github.com/leggapattern01-dot/ultraisolator.git
+git clone https://github.com/chezzof/ultraisolator.git
 cd ultraisolator
 python -m pip install -r requirements.txt
 copy config.json.example config.json
@@ -138,15 +138,15 @@ Production packaging is documented in [BUILDING.md](BUILDING.md).
 
 ## Release
 
-Latest release: [v1.1.1](https://github.com/leggapattern01-dot/ultraisolator/releases/tag/v1.1.1).
+No public GitHub release has been published for `chezzof/ultraisolator` yet.
 
-Published artifacts:
+Until the first public release is cut, build artifacts locally with the release gate:
 
-- `Esports.Isolator.PRO.Setup.1.1.1.exe`
-- `Esports-Isolator-PRO-1.1.1-portable.exe`
-- `SHA256SUMS.txt`
+```powershell
+powershell -File scripts/release-check.ps1
+```
 
-Release notes explicitly document the Windows-only scope, unsigned installer caveat, Python requirement, Administrator requirement, anti-cheat boundary, and opt-in background jailing model.
+That gate creates local NSIS installer and portable artifacts under `ui/dist-packaged`, writes `SHA256SUMS.txt`, and checks the packaged runtime provenance. Release notes must document the Windows-only scope, unsigned installer caveat, trusted Python requirement, Administrator requirement, anti-cheat boundary, and opt-in background jailing model before any artifacts are published.
 
 ## Configuration
 

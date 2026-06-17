@@ -35,7 +35,7 @@ Current production target:
 Run these checks after the automated gate:
 
 - Open `docs/screenshots/dashboard.png`, `docs/screenshots/topology.png`, and `docs/screenshots/settings.png`; reject stale or clipped screenshots.
-- Confirm release notes mention Administrator requirements, unsigned installer status, system Python dependency, Windows-only support, and anti-cheat compatibility boundaries.
+- Confirm release notes mention Administrator requirements, unsigned installer status, trusted Python interpreter dependency, Windows-only support, and anti-cheat compatibility boundaries.
 - Confirm `enable_background_jailing` remains disabled in `config.json.example`.
 - Confirm no local `config.json`, logs, package artifacts, or temporary QA files are staged.
 - Confirm `SHA256SUMS.txt` is uploaded with any public binary artifacts.
