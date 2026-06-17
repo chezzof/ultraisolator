@@ -151,8 +151,8 @@ class ReactFrontendContractTests(unittest.TestCase):
         lifecycle = (SRC / "utils" / "lifecycle.js").read_text(encoding="utf-8")
 
         self.assertIn("function DashboardPage", dashboard)
-        self.assertIn("dashboard-status-panel", dashboard)
-        self.assertIn("Game Mode", dashboard)
+        self.assertIn("dashboard-command-center", dashboard)
+        self.assertIn("Game mode", dashboard)
         self.assertIn("Admin", dashboard)
         self.assertIn("Power Plan", dashboard)
         self.assertIn("Timer", dashboard)
@@ -164,6 +164,42 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn("postLifecycleAction", dashboard)
         self.assertIn("requestJson", lifecycle)
         self.assertNotIn("CPU/RAM", dashboard)
+
+    def test_dashboard_is_status_first_command_center(self):
+        dashboard = (SRC / "pages" / "Dashboard.jsx").read_text(encoding="utf-8")
+
+        for primitive in (
+            "../components/cards/ActionPanel.jsx",
+            "../components/layout/SectionGrid.jsx",
+            "../components/status/StatusPill.jsx",
+            "../components/states/EmptyState.jsx",
+            "../components/states/ErrorState.jsx",
+        ):
+            self.assertIn(primitive, dashboard)
+
+        for marker in (
+            "dashboard-command-center",
+            "dashboard-hero",
+            "Dashboard command center",
+            "dashboard-action-panel",
+            "dashboard-primary-action",
+            "dashboard-action-reason",
+            "dashboard-empty-state",
+            "dashboard-metric-groups",
+            "Session state",
+            "System readiness",
+            "Optimization impact",
+            "Recovery/safety",
+            "dashboard-readiness-section",
+            "warnings and errors",
+        ):
+            self.assertIn(marker, dashboard)
+
+        self.assertNotIn("getBackendToken", dashboard)
+        self.assertNotIn("getBackendUrl", dashboard)
+        self.assertNotIn("Authorization", dashboard)
+        self.assertNotIn("Bearer", dashboard)
+        self.assertNotIn("127.0.0.1", dashboard)
 
     def test_dashboard_has_process_table_filters_and_columns(self):
         table = (SRC / "components" / "ProcessTable.jsx").read_text(encoding="utf-8")

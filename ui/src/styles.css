@@ -2910,6 +2910,200 @@ body {
   background: rgba(148, 166, 176, 0.07);
 }
 
+.dashboard-command-center {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+  gap: var(--eii-space-5);
+  align-items: stretch;
+  margin-top: 18px;
+  border: 1px solid rgba(148, 166, 176, 0.24);
+  border-radius: var(--eii-radius-md);
+  padding: var(--eii-space-5);
+  background:
+    linear-gradient(135deg, rgba(66, 199, 183, 0.12), transparent 42%),
+    linear-gradient(180deg, rgba(25, 37, 46, 0.92), rgba(14, 21, 27, 0.98));
+  box-shadow: var(--eii-shadow-soft);
+}
+
+.dashboard-command-center.game-mode {
+  border-color: rgba(66, 199, 183, 0.54);
+  box-shadow: inset 0 2px 0 var(--eii-accent), var(--eii-shadow);
+}
+
+.dashboard-hero-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.dashboard-hero-kicker,
+.dashboard-section-heading,
+.dashboard-metric-group h2 {
+  color: var(--eii-color-text-subtle);
+  font-family: var(--eii-font-ui);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dashboard-hero-main h2 {
+  margin: var(--eii-space-2) 0 0;
+  color: var(--eii-color-text);
+  font-family: var(--eii-font-ui);
+  font-size: clamp(2rem, 3.5vw, 3.45rem);
+  line-height: 1;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-hero-main p {
+  max-width: 780px;
+  margin: var(--eii-space-3) 0 0;
+  color: var(--eii-color-text-muted);
+  font-family: var(--eii-font-ui);
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.dashboard-hero-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--eii-space-2);
+  margin-top: var(--eii-space-4);
+}
+
+.dashboard-action-panel {
+  min-width: 0;
+  align-items: stretch;
+  flex-direction: column;
+  justify-content: center;
+  background: rgba(8, 13, 17, 0.46);
+}
+
+.dashboard-action-panel .action-panel-actions {
+  width: 100%;
+}
+
+.dashboard-action-stack {
+  display: grid;
+  gap: var(--eii-space-3);
+  justify-items: stretch;
+}
+
+.dashboard-action-buttons.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--eii-space-3);
+  align-items: stretch;
+  justify-content: stretch;
+  width: 100%;
+  padding: 0;
+}
+
+.dashboard-action-buttons button {
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-action-buttons .dashboard-primary-action {
+  grid-column: 1 / -1;
+  border-color: rgba(66, 199, 183, 0.72);
+  background: #42c7b7;
+  color: #061412;
+  font-weight: 800;
+}
+
+.dashboard-action-buttons .dashboard-primary-action:hover:not(:disabled),
+.dashboard-action-buttons .dashboard-primary-action:focus-visible:not(:disabled) {
+  border-color: rgba(109, 224, 210, 0.88);
+  background: #6de0d2;
+  color: #061412;
+}
+
+.dashboard-action-reason {
+  max-width: none;
+  color: var(--eii-color-text-muted);
+  font-family: var(--eii-font-ui);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.dashboard-backend-error,
+.dashboard-empty-state {
+  margin-top: var(--eii-space-4);
+}
+
+.dashboard-empty-state {
+  min-height: 110px;
+}
+
+.dashboard-metric-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--eii-space-4);
+  margin-top: var(--eii-space-5);
+}
+
+.dashboard-metric-group {
+  display: grid;
+  gap: var(--eii-space-3);
+  min-width: 0;
+}
+
+.dashboard-metric-group .dashboard-kpi-grid {
+  margin-top: 0;
+}
+
+.dashboard-metric-group .kpi-cell {
+  min-height: 128px;
+}
+
+.dashboard-secondary-grid {
+  margin-top: var(--eii-space-5);
+}
+
+.dashboard-optimization-section,
+.dashboard-readiness-section,
+.dashboard-diagnostics-section {
+  min-width: 0;
+}
+
+.dashboard-section-heading {
+  margin: 0 0 var(--eii-space-3);
+}
+
+.dashboard-optimization-section .module-surface,
+.dashboard-readiness-section .module-surface {
+  margin-top: 0;
+}
+
+.dashboard-diagnostics-section {
+  margin-top: var(--eii-space-5);
+}
+
+@media (max-width: 1180px) {
+  .dashboard-command-center,
+  .dashboard-metric-groups,
+  .dashboard-secondary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-action-panel,
+  .dashboard-action-stack,
+  .dashboard-action-buttons {
+    justify-items: stretch;
+    justify-content: stretch;
+  }
+
+  .dashboard-action-reason {
+    max-width: none;
+    text-align: left;
+  }
+}
+
 .analysis-score-meter {
   background:
     radial-gradient(circle at center, #111a21 0 56%, transparent 57%),
