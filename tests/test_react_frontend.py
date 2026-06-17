@@ -1,4 +1,6 @@
 import json
+import re
+import unicodedata
 import unittest
 from pathlib import Path
 
@@ -276,12 +278,94 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn(".settings-field", styles)
         self.assertIn(".toggle-row", styles)
 
+    def test_settings_is_risk_grouped_and_safety_aware(self):
+        settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
+        constants = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
+
+        for primitive in (
+            "../components/cards/ActionPanel.jsx",
+            "../components/layout/SectionGrid.jsx",
+            "../components/status/StatusPill.jsx",
+            "../components/states/EmptyState.jsx",
+            "../components/states/ErrorState.jsx",
+        ):
+            self.assertIn(primitive, settings)
+
+        for marker in (
+            "settings-safety-overview",
+            "Background jailing is opt-in",
+            "Use conservative anti-cheat mode",
+            "Some changes require restart",
+            "settings-risk-grid",
+            "settings-risk-section",
+            "Game detection",
+            "Safe/basic behavior",
+            "Performance tuning",
+            "Anti-cheat and protection",
+            "Advanced background jailing",
+            "App profiles / custom paths",
+            "settings-risk-danger",
+            "settings-restart-note",
+            "No Steam or Epic library paths configured",
+            "No app profiles configured",
+        ):
+            self.assertIn(marker, settings)
+
+        self.assertNotIn("getBackendToken", settings)
+        self.assertNotIn("getBackendUrl", settings)
+        self.assertNotIn("Authorization", settings)
+        self.assertNotIn("Bearer", settings)
+        self.assertNotIn("127.0.0.1", settings)
+
+        old_fields = set()
+        config_sections = constants[
+            constants.find("export const CONFIG_SECTIONS"):constants.find("export const FIELD_LABELS")
+        ]
+        for group in re.finditer(r"fields:\s*\[([^\]]*)\]", config_sections, flags=re.S):
+            old_fields.update(re.findall(r"'([a-zA-Z0-9_]+)'", group.group(1)))
+        grouped_fields = set()
+        for group in re.finditer(r"fields:\s*\[([^\]]*)\]", settings, flags=re.S):
+            grouped_fields.update(re.findall(r"'([a-zA-Z0-9_]+)'", group.group(1)))
+        self.assertFalse(old_fields - grouped_fields)
+
+    def test_settings_risk_groups_are_translated(self):
+        settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
+        i18n = (SRC / "i18n.jsx").read_text(encoding="utf-8")
+
+        for key in (
+            "settings.risk.gameDetection.title",
+            "settings.risk.gameDetection.detail",
+            "settings.risk.gameDetection.badge",
+            "settings.risk.safeBasic.title",
+            "settings.risk.safeBasic.detail",
+            "settings.risk.safeBasic.badge",
+            "settings.risk.performance.title",
+            "settings.risk.performance.detail",
+            "settings.risk.performance.badge",
+            "settings.risk.protection.title",
+            "settings.risk.protection.detail",
+            "settings.risk.protection.badge",
+            "settings.risk.advancedJailing.title",
+            "settings.risk.advancedJailing.detail",
+            "settings.risk.advancedJailing.badge",
+            "settings.risk.appProfiles.title",
+            "settings.risk.appProfiles.detail",
+            "settings.risk.appProfiles.badge",
+        ):
+            self.assertGreaterEqual(i18n.count(key), 2, key)
+
+        concrete_settings_keys = set(re.findall(r"t\('([^']+)'", settings))
+        concrete_settings_keys.update(re.findall(r't\("([^"]+)"', settings))
+        for key in sorted(key for key in concrete_settings_keys if key.startswith("settings.")):
+            self.assertGreaterEqual(i18n.count(key), 2, key)
+
     def test_settings_has_per_app_profiles_crud_editor(self):
         settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
         config_utils = (SRC / "utils" / "config.js").read_text(encoding="utf-8")
         styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
-        self.assertIn("Per-App Profiles", settings)
+        self.assertIn("APP_PROFILES_RISK_GROUP", settings)
+        self.assertIn("app-profiles", settings)
         self.assertIn("addProfile", settings)
         self.assertIn("removeProfile", settings)
         self.assertIn("updateProfile", settings)
@@ -519,7 +603,7 @@ class ReactFrontendContractTests(unittest.TestCase):
         english_block = i18n[:i18n.index("  ru: {")]
 
         self.assertIn("'analysis.points': '{{points}} points'", english_block)
-        self.assertNotIn("очков", english_block)
+        self.assertNotIn("\u043e\u0447\u043a\u043e\u0432", english_block)
 
     def test_styles_reuse_benchmark_hud_tokens(self):
         styles = (SRC / "styles.css").read_text(encoding="utf-8")
@@ -539,13 +623,43 @@ class ReactFrontendContractTests(unittest.TestCase):
             ROOT / "SECURITY.md",
             SRC / "i18n.jsx",
         )
-        mojibake_markers = ("Ð", "Ñ", "â€”", "â€“", "â”")
+        mojibake_markers = (
+            "\u00d0",
+            "\u00d1",
+            "\u00e2\u20ac\u201d",
+            "\u00e2\u20ac\u201c",
+            "\u00e2\u201d",
+        )
 
         for path in checked_files:
             with self.subTest(path=path.name):
                 text = path.read_text(encoding="utf-8")
                 for marker in mojibake_markers:
                     self.assertNotIn(marker, text)
+
+    def test_frontend_and_tests_have_no_hidden_control_characters(self):
+        allowed = {"\n", "\r", "\t"}
+        hits = []
+        for root in (SRC, ROOT / "tests"):
+            for path in root.rglob("*"):
+                if path.suffix.lower() not in {".css", ".js", ".jsx", ".ts", ".tsx", ".py"}:
+                    continue
+                text = path.read_text(encoding="utf-8", errors="ignore")
+                for line_no, line in enumerate(text.splitlines(True), 1):
+                    for col_no, char in enumerate(line, 1):
+                        if unicodedata.category(char) in {"Cf", "Cc"} and char not in allowed:
+                            hits.append((str(path.relative_to(ROOT)), line_no, col_no, f"U+{ord(char):04X}"))
+        self.assertEqual([], hits)
+
+    def test_react_frontend_contract_source_is_ascii(self):
+        text = Path(__file__).read_text(encoding="utf-8")
+        non_ascii = [
+            (line_no, col_no, f"U+{ord(char):04X}")
+            for line_no, line in enumerate(text.splitlines(), 1)
+            for col_no, char in enumerate(line, 1)
+            if ord(char) > 127
+        ]
+        self.assertEqual([], non_ascii)
 
     def test_repository_has_oss_launch_hygiene_files(self):
         expected_files = (
