@@ -1,4 +1,5 @@
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -275,6 +276,56 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn(".settings-grid", styles)
         self.assertIn(".settings-field", styles)
         self.assertIn(".toggle-row", styles)
+
+    def test_settings_is_risk_grouped_and_safety_aware(self):
+        settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
+        constants = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
+
+        for primitive in (
+            "../components/cards/ActionPanel.jsx",
+            "../components/layout/SectionGrid.jsx",
+            "../components/status/StatusPill.jsx",
+            "../components/states/EmptyState.jsx",
+            "../components/states/ErrorState.jsx",
+        ):
+            self.assertIn(primitive, settings)
+
+        for marker in (
+            "settings-safety-overview",
+            "Background jailing is opt-in",
+            "Use conservative anti-cheat mode",
+            "Some changes require restart",
+            "settings-risk-grid",
+            "settings-risk-section",
+            "Game detection",
+            "Safe/basic behavior",
+            "Performance tuning",
+            "Anti-cheat and protection",
+            "Advanced background jailing",
+            "App profiles / custom paths",
+            "settings-risk-danger",
+            "settings-restart-note",
+            "No Steam or Epic library paths configured",
+            "No app profiles configured",
+        ):
+            self.assertIn(marker, settings)
+
+        self.assertNotIn("getBackendToken", settings)
+        self.assertNotIn("getBackendUrl", settings)
+        self.assertNotIn("Authorization", settings)
+        self.assertNotIn("Bearer", settings)
+        self.assertNotIn("127.0.0.1", settings)
+
+        old_fields = set()
+        config_sections = constants[
+            constants.find("export const CONFIG_SECTIONS"):constants.find("export const FIELD_LABELS")
+        ]
+        for group in re.finditer(r"fields:\s*\[([^\]]*)\]", config_sections, flags=re.S):
+            old_fields.update(re.findall(r"'([a-zA-Z0-9_]+)'", group.group(1)))
+        grouped_fields = set()
+        for group in re.finditer(r"fields:\s*\[([^\]]*)\]", settings, flags=re.S):
+            grouped_fields.update(re.findall(r"'([a-zA-Z0-9_]+)'", group.group(1)))
+        self.assertFalse(old_fields - grouped_fields)
 
     def test_settings_has_per_app_profiles_crud_editor(self):
         settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")

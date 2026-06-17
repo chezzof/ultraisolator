@@ -2910,6 +2910,159 @@ body {
   background: rgba(148, 166, 176, 0.07);
 }
 
+.settings-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--eii-space-3);
+}
+
+.settings-header-actions .settings-actions {
+  margin-left: var(--eii-space-2);
+}
+
+.settings-config-strip {
+  align-items: center;
+  margin-top: 16px;
+}
+
+.settings-toolbar-label {
+  margin-bottom: var(--eii-space-1);
+  color: var(--eii-color-text-subtle);
+  font-family: var(--eii-font-ui);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.settings-toolbar-pills,
+.settings-safety-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--eii-space-2);
+}
+
+.settings-safety-overview {
+  align-items: flex-start;
+  margin-top: var(--eii-space-4);
+  border-color: rgba(245, 196, 81, 0.28);
+  background:
+    linear-gradient(135deg, rgba(245, 196, 81, 0.1), transparent 44%),
+    linear-gradient(180deg, rgba(22, 35, 45, 0.78), rgba(13, 20, 26, 0.94));
+}
+
+.settings-safety-overview .action-panel-actions {
+  max-width: 520px;
+}
+
+.settings-error-state,
+.settings-default-state,
+.settings-loading-state {
+  margin-top: var(--eii-space-4);
+}
+
+.settings-risk-grid {
+  grid-template-columns: repeat(2, minmax(360px, 1fr));
+  gap: var(--eii-space-4);
+  margin-top: var(--eii-space-5);
+}
+
+.settings-risk-section {
+  display: grid;
+  gap: var(--eii-space-3);
+  min-height: 0;
+}
+
+.settings-risk-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--eii-space-4);
+}
+
+.settings-risk-header .module-title {
+  margin: 0;
+}
+
+.settings-risk-detail,
+.settings-risk-copy,
+.settings-restart-note {
+  color: var(--eii-color-text-muted);
+  font-family: var(--eii-font-ui);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.settings-risk-detail {
+  margin-top: var(--eii-space-2);
+  max-width: 720px;
+}
+
+.settings-risk-copy,
+.settings-restart-note {
+  border: 1px solid rgba(245, 196, 81, 0.26);
+  border-radius: var(--eii-radius-sm);
+  padding: var(--eii-space-3);
+  background: rgba(245, 196, 81, 0.06);
+}
+
+.settings-risk-danger {
+  border-color: rgba(255, 107, 122, 0.32);
+  background:
+    linear-gradient(135deg, rgba(255, 107, 122, 0.08), transparent 44%),
+    rgba(13, 20, 23, 0.9);
+}
+
+.settings-inline-empty {
+  min-height: 96px;
+  margin-top: var(--eii-space-2);
+  text-align: left;
+}
+
+.settings-inline-empty.ui-state {
+  place-items: start;
+}
+
+.settings-inline-empty .ui-state-title,
+.settings-inline-empty .ui-state-detail {
+  text-align: left;
+}
+
+.settings-app-profiles,
+.app-settings-section,
+.presets-section {
+  grid-column: 1 / -1;
+}
+
+.notifications-settings-section {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1180px) {
+  .settings-risk-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-header-actions,
+  .settings-config-strip,
+  .settings-risk-header,
+  .settings-safety-overview {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-header-actions .settings-actions {
+    margin-left: 0;
+  }
+
+  .settings-toolbar-pills,
+  .settings-safety-pills {
+    justify-content: flex-start;
+  }
+}
+
 .dashboard-command-center {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
