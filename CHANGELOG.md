@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.0.0] - First public release candidate
+## [1.1.1] - First public release candidate
 
 - Prepared the first public Windows 10/11 release candidate for source plus reproducible local builds.
 - Documented the unsigned installer caveat, Administrator requirement, anti-cheat compatibility boundary, and opt-in background jailing model.
