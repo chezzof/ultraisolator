@@ -1195,7 +1195,8 @@ body {
 }
 
 .topology-summary-grid {
-  margin-top: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: var(--eii-space-4);
 }
 
 .logs-summary-grid {
@@ -1268,11 +1269,80 @@ body {
   margin-top: 12px;
 }
 
+.topology-page-header {
+  margin-bottom: var(--eii-space-4);
+}
+
+.topology-state-panel {
+  margin-top: var(--eii-space-4);
+}
+
+.topology-state-panel .action-panel-actions {
+  flex: 0 0 auto;
+}
+
+.topology-state-panel button {
+  height: 34px;
+  border: 1px solid var(--eii-border-soft);
+  border-radius: var(--eii-radius-sm);
+  padding: 0 14px;
+  background: rgba(7, 10, 13, 0.68);
+  color: var(--eii-text);
+  cursor: pointer;
+  font-family: var(--eii-font-label);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.topology-state-panel button:hover:not(:disabled),
+.topology-state-panel button:focus-visible:not(:disabled) {
+  border-color: var(--eii-accent);
+  background: rgba(66, 199, 183, 0.1);
+  color: var(--eii-accent-strong);
+  outline: 0;
+}
+
+.topology-state-panel button:disabled {
+  cursor: not-allowed;
+  color: var(--eii-muted);
+  opacity: 0.48;
+}
+
+.topology-legend-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: var(--eii-space-4);
+}
+
+.topology-legend-card {
+  display: grid;
+  gap: var(--eii-space-2);
+  min-width: 0;
+  border: 1px solid var(--eii-border-soft);
+  border-radius: var(--eii-radius);
+  padding: var(--eii-space-4);
+  background: rgba(8, 13, 17, 0.48);
+}
+
+.topology-legend-card strong {
+  color: var(--eii-text);
+  font-family: var(--eii-font-mono);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.topology-legend-card span:last-child {
+  color: var(--eii-muted);
+  font-family: var(--eii-font-label);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .topology-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: var(--eii-space-4);
   align-items: start;
+  margin-top: var(--eii-space-5);
 }
 
 .topology-map,
@@ -1293,8 +1363,8 @@ body {
 .topology-subtitle {
   margin-top: 8px;
   color: var(--eii-muted);
-  font-family: var(--eii-font-mono);
-  font-size: 11px;
+  font-family: var(--eii-font-label);
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -1310,10 +1380,10 @@ body {
   align-items: center;
   gap: 7px;
   color: var(--eii-text-secondary);
-  font-family: var(--eii-font-mono);
+  font-family: var(--eii-font-label);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -1359,16 +1429,16 @@ body {
 
 .core-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+  gap: 10px;
   padding: 12px;
 }
 
 .core-tile {
   display: grid;
-  grid-template-rows: auto auto auto auto;
+  grid-template-rows: auto auto auto 1fr;
   align-content: start;
-  min-height: 118px;
+  min-height: 132px;
   border: 1px solid var(--eii-border-soft);
   border-radius: var(--eii-radius-sm);
   padding: 12px;
@@ -1379,6 +1449,28 @@ body {
   cursor: pointer;
   text-align: left;
   outline: 0;
+}
+
+.core-tile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--eii-space-2);
+}
+
+.core-selected-indicator {
+  width: 10px;
+  height: 10px;
+  margin-top: 2px;
+  border: 1px solid rgba(148, 166, 176, 0.38);
+  border-radius: 999px;
+  background: rgba(148, 166, 176, 0.08);
+}
+
+.core-selected-indicator.active {
+  border-color: rgba(109, 224, 210, 0.9);
+  background: var(--eii-accent);
+  box-shadow: 0 0 0 3px rgba(66, 199, 183, 0.14);
 }
 
 .core-tile:hover,
@@ -1410,10 +1502,9 @@ body {
 
 .core-type,
 .core-partition,
-.core-logicals {
+.core-tile-meta {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .core-type {
@@ -1425,19 +1516,22 @@ body {
 }
 
 .core-partition {
-  margin-top: 8px;
-  font-family: var(--eii-font-mono);
-  font-size: 10px;
+  margin-top: 12px;
+  font-family: var(--eii-font-label);
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
-.core-logicals {
-  margin-top: 6px;
+.core-tile-meta {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
   color: var(--eii-muted);
   font-family: var(--eii-font-mono);
   font-size: 10px;
+  line-height: 1.35;
 }
 
 .partition-game {
@@ -1481,50 +1575,64 @@ body {
 }
 
 .core-detail-panel {
-  padding: 18px 20px 20px;
+  padding: var(--eii-space-4);
+}
+
+.core-detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--eii-space-3);
 }
 
 .core-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 16px;
+  gap: var(--eii-space-3);
+  margin-top: var(--eii-space-4);
 }
 
-.core-detail-grid div {
+.core-detail-section {
   min-width: 0;
   border: 1px solid var(--eii-border-soft);
   border-radius: var(--eii-radius-sm);
-  padding: 11px 12px;
+  padding: var(--eii-space-3);
   background: rgba(7, 10, 13, 0.28);
 }
 
-.core-detail-grid .wide {
+.core-detail-section.wide {
   grid-column: 1 / -1;
 }
 
-.core-detail-grid span,
-.core-detail-grid strong {
+.core-detail-section span,
+.core-detail-section strong {
   display: block;
   min-width: 0;
 }
 
-.core-detail-grid span {
+.core-detail-section span {
   margin-bottom: 6px;
   color: var(--eii-muted);
   font-family: var(--eii-font-label);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
-.core-detail-grid strong {
+.core-detail-section strong {
   color: var(--eii-text);
   font-family: var(--eii-font-mono);
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.topology-loading-state,
+.topology-empty-state,
+.topology-error-state,
+.core-detail-empty {
+  margin: var(--eii-space-4);
 }
 
 .logs-module {
@@ -2231,6 +2339,11 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .topology-summary-grid,
+  .topology-legend-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .topology-map-header {
     flex-direction: column;
   }
@@ -2300,6 +2413,8 @@ body {
     grid-template-columns: 1fr 1fr;
   }
 
+  .topology-summary-grid,
+  .topology-legend-grid,
   .core-grid,
   .core-detail-grid {
     grid-template-columns: 1fr;
@@ -2405,7 +2520,7 @@ body {
 .settings-toolbar,
 .settings-section,
 .llc-group,
-.core-detail-grid div,
+.core-detail-section,
 .analysis-summary div,
 .analysis-check,
 .readiness-check,
@@ -2805,7 +2920,7 @@ body {
 .settings-section,
 .kpi-cell,
 .llc-group,
-.core-detail-grid div,
+.core-detail-section,
 .analysis-summary div,
 .analysis-check,
 .readiness-check,

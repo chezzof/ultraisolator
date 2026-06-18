@@ -434,6 +434,60 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn(".core-tile", styles)
         self.assertIn(".core-detail-panel", styles)
 
+    def test_topology_uses_shared_primitives_and_release_ready_states(self):
+        topology = (SRC / "pages" / "Topology.jsx").read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        for primitive in (
+            "../components/cards/ActionPanel.jsx",
+            "../components/cards/MetricCard.jsx",
+            "../components/layout/PageHeader.jsx",
+            "../components/layout/SectionGrid.jsx",
+            "../components/status/StatusPill.jsx",
+            "../components/states/EmptyState.jsx",
+            "../components/states/ErrorState.jsx",
+        ):
+            self.assertIn(primitive, topology)
+
+        for marker in (
+            "topology-page-header",
+            "topology-state-panel",
+            "topology-summary-grid",
+            "topology-legend-grid",
+            "topology-legend-card",
+            "topology-core-map",
+            "core-tile-meta",
+            "core-detail-panel",
+            "core-detail-section",
+            "core-detail-empty",
+            "topology-loading-state",
+            "topology-empty-state",
+            "topology-error-state",
+            "topology-selected-core",
+            "Partition legend",
+        ):
+            self.assertIn(marker, topology + styles)
+
+        for label in ("Game", "Background", "Housekeeping", "Unassigned"):
+            self.assertIn(label, topology)
+
+        self.assertNotIn("getBackendToken", topology)
+        self.assertNotIn("getBackendUrl", topology)
+        self.assertNotIn("Authorization", topology)
+        self.assertNotIn("Bearer", topology)
+        self.assertNotIn("127.0.0.1", topology)
+
+    def test_topology_grids_use_responsive_css_not_inline_columns(self):
+        topology = (SRC / "pages" / "Topology.jsx").read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertNotIn('className="topology-summary-grid" columns=', topology)
+        self.assertNotIn('className="topology-legend-grid" columns=', topology)
+        self.assertIn(".topology-summary-grid", styles)
+        self.assertIn(".topology-legend-grid", styles)
+        self.assertIn("@media (max-width: 1040px)", styles)
+        self.assertIn("@media (max-width: 640px)", styles)
+
     def test_logs_page_has_log_viewer_filters_and_game_mode_pause(self):
         app = (SRC / "App.jsx").read_text(encoding="utf-8")
         navigation = (SRC / "constants" / "navigation.js").read_text(encoding="utf-8")
