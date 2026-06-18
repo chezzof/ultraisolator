@@ -27,6 +27,71 @@ class ReactFrontendContractTests(unittest.TestCase):
             for name, version in package[group_name].items():
                 self.assertNotRegex(version, r"^[~^>=<*]", f"{name} should be pinned")
 
+    def test_package_declares_visual_and_a11y_quality_gates(self):
+        package = json.loads((UI / "package.json").read_text(encoding="utf-8"))
+        scripts = package["scripts"]
+        dev_dependencies = package["devDependencies"]
+
+        self.assertEqual(scripts.get("test:visual"), "playwright test --config playwright.config.js tests/visual")
+        self.assertEqual(scripts.get("test:a11y"), "playwright test --config playwright.config.js tests/a11y")
+        self.assertEqual(scripts.get("test:ui-quality"), "npm run build:renderer && npm run test:visual && npm run test:a11y")
+        self.assertIn("@playwright/test", dev_dependencies)
+        self.assertIn("@axe-core/playwright", dev_dependencies)
+        self.assertTrue((UI / "playwright.config.js").exists())
+        self.assertTrue((UI / "tests" / "visual").is_dir())
+        self.assertTrue((UI / "tests" / "a11y").is_dir())
+        self.assertTrue((UI / "tests" / "fixtures" / "rendererMock.js").exists())
+
+    def test_visual_tests_cover_redesigned_renderer_states_with_mock_data(self):
+        visual_dir = UI / "tests" / "visual"
+        visual_sources = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(visual_dir.glob("*.spec.js"))
+        ) if visual_dir.exists() else ""
+
+        for marker in (
+            "#dashboard",
+            "#settings",
+            "#topology",
+            "backend-unavailable",
+            "installRendererMock",
+            "toHaveScreenshot",
+            "dashboard-command-center",
+            "settings-page",
+            "topology-core-map",
+        ):
+            self.assertIn(marker, visual_sources)
+
+        self.assertNotIn("getBackendToken", visual_sources)
+        self.assertNotIn("getBackendUrl", visual_sources)
+        self.assertNotIn("Authorization", visual_sources)
+        self.assertNotIn("Bearer", visual_sources)
+        self.assertNotIn("127.0.0.1", visual_sources)
+
+    def test_a11y_tests_cover_main_renderer_pages_with_axe(self):
+        a11y_dir = UI / "tests" / "a11y"
+        a11y_sources = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(a11y_dir.glob("*.spec.js"))
+        ) if a11y_dir.exists() else ""
+
+        for marker in (
+            "@axe-core/playwright",
+            "AxeBuilder",
+            "#dashboard",
+            "#settings",
+            "#topology",
+            "installRendererMock",
+            "violations",
+        ):
+            self.assertIn(marker, a11y_sources)
+
+        self.assertNotIn("getBackendToken", a11y_sources)
+        self.assertNotIn("getBackendUrl", a11y_sources)
+        self.assertNotIn("Authorization", a11y_sources)
+        self.assertNotIn("Bearer", a11y_sources)
+        self.assertNotIn("127.0.0.1", a11y_sources)
+
     def test_layout_has_sidebar_navigation_and_three_placeholder_pages(self):
         app = (SRC / "App.jsx").read_text(encoding="utf-8")
 

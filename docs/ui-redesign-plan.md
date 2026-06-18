@@ -194,6 +194,21 @@ python -m unittest discover -s tests -p "test_*.py" -v
 git diff --check
 ```
 
+Local gate details:
+
+1. `npm.cmd --prefix ui run test:visual` runs Playwright screenshot comparisons at `1366x768` against deterministic mock renderer data.
+2. `npm.cmd --prefix ui run test:a11y` runs `@axe-core/playwright` smoke checks for Dashboard, Settings, and Topology.
+3. `npm.cmd --prefix ui run test:ui-quality` builds the renderer, then runs both visual and accessibility gates.
+4. Baselines are committed under `ui/tests/visual/*-snapshots/`.
+5. To intentionally refresh baselines after a reviewed UI change, run:
+
+```powershell
+npm.cmd --prefix ui run test:visual -- --update-snapshots
+```
+
+6. The gate defaults to the installed Chrome channel for local stability. Override with `EII_PLAYWRIGHT_CHANNEL` only when validating another installed Playwright browser channel.
+7. These scripts are local/manual release-quality gates first; do not make them mandatory in CI until the snapshot set has proven stable across runner images.
+
 ### PR 5: Refresh Public Screenshots
 
 Scope:

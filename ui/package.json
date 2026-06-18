@@ -16,6 +16,9 @@
     "build:backend-manifest": "node scripts/generate-backend-manifest.js",
     "verify:packaged-runtime": "node scripts/verify-packaged-runtime.js",
     "clean:packaged": "node scripts/clean-packaged-output.js",
+    "test:visual": "playwright test --config playwright.config.js tests/visual",
+    "test:a11y": "playwright test --config playwright.config.js tests/a11y",
+    "test:ui-quality": "npm run build:renderer && npm run test:visual && npm run test:a11y",
     "pack": "npm run clean:packaged && npm run build:renderer && npm run build:assets && npm run build:backend-manifest && electron-builder --dir && node scripts/harden-packaged-backend-acl.js dist-packaged/win-unpacked",
     "build": "npm run clean:packaged && npm run build:renderer && npm run build:assets && npm run build:backend-manifest && electron-builder --win nsis portable && node scripts/harden-packaged-backend-acl.js dist-packaged/win-unpacked"
   },
@@ -28,6 +31,8 @@
     "vite": "8.0.16"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.11.3",
+    "@playwright/test": "1.61.0",
     "electron": "42.2.0",
     "electron-builder": "26.8.1",
     "sass": "1.99.0"
