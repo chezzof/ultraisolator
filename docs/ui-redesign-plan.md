@@ -217,6 +217,11 @@ Scope:
 2. README screenshot references if needed.
 3. Release notes screenshot references if needed.
 
+Status: refreshed after the Dashboard, Settings, Topology, visual regression,
+and accessibility passes using deterministic mock renderer data. Public README
+screenshots now cover the Dashboard command center, Settings safety hierarchy,
+and CPU Topology core map without local usernames, tokens, or private paths.
+
 Rules:
 
 1. Capture dashboard, topology, settings, logs, and diagnostic/error states.
