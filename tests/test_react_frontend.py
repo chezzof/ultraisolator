@@ -477,6 +477,17 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertNotIn("Bearer", topology)
         self.assertNotIn("127.0.0.1", topology)
 
+    def test_topology_grids_use_responsive_css_not_inline_columns(self):
+        topology = (SRC / "pages" / "Topology.jsx").read_text(encoding="utf-8")
+        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+
+        self.assertNotIn('className="topology-summary-grid" columns=', topology)
+        self.assertNotIn('className="topology-legend-grid" columns=', topology)
+        self.assertIn(".topology-summary-grid", styles)
+        self.assertIn(".topology-legend-grid", styles)
+        self.assertIn("@media (max-width: 1040px)", styles)
+        self.assertIn("@media (max-width: 640px)", styles)
+
     def test_logs_page_has_log_viewer_filters_and_game_mode_pause(self):
         app = (SRC / "App.jsx").read_text(encoding="utf-8")
         navigation = (SRC / "constants" / "navigation.js").read_text(encoding="utf-8")

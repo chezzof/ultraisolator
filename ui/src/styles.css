@@ -1195,7 +1195,7 @@ body {
 }
 
 .topology-summary-grid {
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-top: var(--eii-space-4);
 }
 
@@ -1309,7 +1309,7 @@ body {
 }
 
 .topology-legend-grid {
-  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-top: var(--eii-space-4);
 }
 
@@ -2339,6 +2339,11 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .topology-summary-grid,
+  .topology-legend-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .topology-map-header {
     flex-direction: column;
   }
@@ -2408,6 +2413,8 @@ body {
     grid-template-columns: 1fr 1fr;
   }
 
+  .topology-summary-grid,
+  .topology-legend-grid,
   .core-grid,
   .core-detail-grid {
     grid-template-columns: 1fr;

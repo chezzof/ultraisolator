@@ -154,7 +154,7 @@ export function TopologyPage({ live }) {
         )}
       />
 
-      <SectionGrid className="topology-summary-grid" columns="repeat(4, minmax(0, 1fr))" ariaLabel="Topology summary">
+      <SectionGrid className="topology-summary-grid" ariaLabel="Topology summary">
         <MetricCard
           label={t('topology.totalCores', 'Total Cores')}
           value={summary.core_count ?? cores.length}
@@ -180,7 +180,7 @@ export function TopologyPage({ live }) {
         />
       </SectionGrid>
 
-      <SectionGrid className="topology-legend-grid" columns="repeat(4, minmax(0, 1fr))" ariaLabel="Partition legend">
+      <SectionGrid className="topology-legend-grid" ariaLabel="Partition legend">
         {PARTITION_KEYS.map((partition) => (
           <div className={`topology-legend-card ${PARTITION_CLASSES[partition]}`} key={partition}>
             <StatusPill tone={PARTITION_TONES[partition]} showDot>{partitionLabel(partition)}</StatusPill>
