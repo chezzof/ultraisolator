@@ -44,6 +44,30 @@ body:
     attributes:
       label: Game
       placeholder: "Counter-Strike 2"
+    validations:
+      required: true
+  - type: dropdown
+    id: administrator
+    attributes:
+      label: Administrator mode
+      description: Did you run the CLI or desktop app with Administrator privileges?
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure"
+    validations:
+      required: true
+  - type: dropdown
+    id: background-jailing
+    attributes:
+      label: Background jailing
+      description: Was `enable_background_jailing` enabled?
+      options:
+        - "No"
+        - "Yes"
+        - "Not sure"
+    validations:
+      required: true
   - type: textarea
     id: logs
     attributes:
@@ -55,6 +79,5 @@ body:
     attributes:
       label: Confirmation
       options:
-        - label: I ran the tool as Administrator
         - label: I am not pasting any private/sensitive information
           required: true

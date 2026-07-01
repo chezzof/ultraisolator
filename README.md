@@ -35,7 +35,7 @@ Esports Isolator PRO detects a running game, reserves cleaner CPU capacity for i
 
 | What a reviewer can verify | Evidence in this repository |
 |----------------------------|-----------------------------|
-| **Release readiness** | `scripts/release-check.ps1` runs Python tests, config dry-run, npm audit, renderer build, backend manifest generation, smoke test, package build, packaged runtime provenance checks, and checksum generation. |
+| **Release readiness** | `scripts/release-check.ps1` runs Python tests, config dry-run, npm audit, renderer build, backend manifest generation, smoke test, visual/accessibility quality checks, package build, packaged runtime provenance checks, and checksum generation. |
 | **Measured performance** | CS2 VProf benchmark shows avg FPS +9.8%, P95 spike -26.0%, client rendering spike -48.0%, and HUD spike -87.6%; source summary lives in `docs/benchmarks/cs2-vprof-summary.json`. |
 | **Safety boundary** | Windows-only, Administrator-scoped, anti-cheat-aware, protected process list, opt-in background jailing, and crash recovery. |
 | **OSS hygiene** | CI, issue templates, PR template, security policy, release checklist, reproducible build docs, and public submission notes. |
@@ -146,7 +146,7 @@ Until the first public release is cut, build artifacts locally with the release 
 powershell -File scripts/release-check.ps1
 ```
 
-That gate creates local NSIS installer and portable artifacts under `ui/dist-packaged`, writes `SHA256SUMS.txt`, and checks the packaged runtime provenance. Release notes must document the Windows-only scope, unsigned installer caveat, trusted Python requirement, Administrator requirement, anti-cheat boundary, and opt-in background jailing model before any artifacts are published.
+That gate creates local NSIS installer and portable artifacts under `ui/dist-packaged`, writes `SHA256SUMS.txt`, and checks the packaged runtime provenance. Checksums detect artifact corruption but do not authenticate publisher provenance without signed checksums or attestations. Release notes must document the Windows-only scope, unsigned installer caveat, trusted Python requirement, Administrator requirement, anti-cheat boundary, and opt-in background jailing model before any artifacts are published.
 
 ## Configuration
 
@@ -251,7 +251,7 @@ Suggested application narrative:
 
 - Problem: competitive games suffer from background scheduling noise and inconsistent frame times.
 - Solution: reversible Windows process isolation with protected anti-cheat/system paths.
-- Evidence: CS2 VProf benchmark report, tests, screenshots, release artifacts, and local smoke checks.
+- Evidence: CS2 VProf benchmark report, tests, screenshots, visual/accessibility checks, release artifacts, and local smoke checks.
 - OSS value: transparent implementation, reproducible local build, issue/PR templates, and documented safety boundaries.
 
 See [docs/codex-for-oss-submission.md](docs/codex-for-oss-submission.md) for the submission copy and evidence trail, and [docs/oss-launch-checklist.md](docs/oss-launch-checklist.md) for ethical outreach and repository launch steps.
