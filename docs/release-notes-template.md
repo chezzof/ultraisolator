@@ -22,6 +22,14 @@ Generate artifacts and checksums with:
 powershell -File scripts/release-check.ps1
 ```
 
+The release gate also runs installed and portable artifact verification. It
+extracts the NSIS and portable payloads with 7-Zip, checks `resources/backend`
+against the trusted app-bundle manifest, and verifies packaged runtime
+provenance. ACL safety is checked on `win-unpacked` before cleanup; temporary
+extraction ACLs are not treated as install-location ACL evidence. If 7-Zip is
+not on `PATH`, set `EII_SEVEN_ZIP` to a trusted `7z.exe`. Do not use
+`EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY=1` for published artifacts.
+
 ## Verification
 
 This release should be published only after the release gate passes:
@@ -40,6 +48,7 @@ Expected gate coverage:
 - UI smoke test.
 - Windows NSIS and portable package build.
 - Packaged runtime provenance verification.
+- Installed and portable artifact verification.
 - SHA256 checksum manifest.
 - Public docs and screenshot presence checks.
 - Local config/log/recovery/package ignore checks.

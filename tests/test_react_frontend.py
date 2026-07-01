@@ -813,7 +813,8 @@ class ReactFrontendContractTests(unittest.TestCase):
             "npm --prefix ui run clean:packaged",
             "scripts/release-manifest.ps1",
             "git check-ignore",
-            "node ui/scripts/clean-packaged-output.js $item",
+            "Remove-PackageOutputItem $packageOutput $item",
+            "npm --prefix ui run verify:installed-artifacts",
         ):
             self.assertIn(command, release_check)
 

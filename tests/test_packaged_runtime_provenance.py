@@ -551,9 +551,20 @@ class BackendResourceIntegrityTests(unittest.TestCase):
             "node scripts/verify-packaged-runtime.js",
             package["scripts"]["verify:packaged-runtime"],
         )
+        self.assertEqual(
+            "node scripts/verify-installed-artifacts.js",
+            package["scripts"]["verify:installed-artifacts"],
+        )
         self.assertEqual("node scripts/clean-packaged-output.js", package["scripts"]["clean:packaged"])
         self.assertIn("backend-manifest.json", package["build"]["files"])
         self.assertEqual("scripts/harden-packaged-backend-acl.js", package["build"]["afterPack"])
+
+    def test_packaged_runtime_verifier_exports_reusable_contract(self):
+        verifier = (ROOT / "ui" / "scripts" / "verify-packaged-runtime.js").read_text(encoding="utf-8")
+
+        self.assertIn("if (require.main === module)", verifier)
+        self.assertIn("verifyPackagedRuntime", verifier)
+        self.assertIn("module.exports", verifier)
 
     def test_after_pack_hook_hardens_manifest_authority_and_backend_acls(self):
         hook = (ROOT / "ui" / "scripts" / "harden-packaged-backend-acl.js").read_text(encoding="utf-8")
@@ -575,10 +586,90 @@ class BackendResourceIntegrityTests(unittest.TestCase):
     def test_packaged_runtime_verifier_checks_default_python_policy(self):
         verifier = (ROOT / "ui" / "scripts" / "verify-packaged-runtime.js").read_text(encoding="utf-8")
 
-        self.assertIn("assertPackagedPythonPolicy(path.dirname(backendRoot))", verifier)
+        self.assertIn("assertPackagedPythonPolicy(path.dirname(resolvedBackendRoot), options)", verifier)
         self.assertIn("bundledPythonPath", verifier)
         self.assertIn("python', 'python.exe", verifier)
         self.assertIn("production packaged runtime accepted arbitrary EII_PYTHON", verifier)
+
+    def test_installed_artifact_verifier_checks_release_artifacts_and_extracted_payloads(self):
+        verifier = (ROOT / "ui" / "scripts" / "verify-installed-artifacts.js").read_text(encoding="utf-8")
+
+        self.assertIn("EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY", verifier)
+        self.assertIn("Esports Isolator PRO Setup", verifier)
+        self.assertIn("Esports-Isolator-PRO-", verifier)
+        self.assertIn("SHA256SUMS.txt", verifier)
+        self.assertIn("verifyPackagedRuntime", verifier)
+        self.assertIn("resources/backend", verifier)
+        self.assertIn("extractNestedArchives", verifier)
+        self.assertIn("resolveSevenZipCommand", verifier)
+
+    def test_installed_artifact_verifier_rejects_unexpected_root_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dist = Path(tmp)
+            version = "9.9.9"
+            installer = dist / f"Esports Isolator PRO Setup {version}.exe"
+            portable = dist / f"Esports-Isolator-PRO-{version}-portable.exe"
+            extra = dist / "unexpected.blockmap"
+            installer.write_bytes(b"installer")
+            portable.write_bytes(b"portable")
+            extra.write_bytes(b"extra")
+            script = rf"""
+                const crypto = require('crypto');
+                const fs = require('fs');
+                const path = require('path');
+                const verifier = require('./ui/scripts/verify-installed-artifacts');
+                const dist = {json.dumps(str(dist))};
+                const version = {json.dumps(version)};
+                const artifacts = verifier.expectedArtifactNames(version);
+                const lines = artifacts.map((name) => {{
+                  const digest = crypto.createHash('sha256')
+                    .update(fs.readFileSync(path.join(dist, name)))
+                    .digest('hex');
+                  return `${{digest}}  ${{name}}`;
+                }});
+                fs.writeFileSync(path.join(dist, 'SHA256SUMS.txt'), `${{lines.join('\n')}}\n`);
+                const result = {{ rejected: false, message: '' }};
+                try {{
+                  verifier.verifyReleaseArtifacts({{ distDir: dist, version }});
+                }} catch (error) {{
+                  result.rejected = true;
+                  result.message = error.message;
+                }}
+                console.log(JSON.stringify(result));
+            """
+            result = run_node(script)
+
+        self.assertTrue(result["rejected"])
+        self.assertIn("unexpected root release artifact", result["message"].lower())
+
+    def test_installed_artifact_verifier_rejects_bad_checksum_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dist = Path(tmp)
+            version = "9.9.9"
+            (dist / f"Esports Isolator PRO Setup {version}.exe").write_bytes(b"installer")
+            (dist / f"Esports-Isolator-PRO-{version}-portable.exe").write_bytes(b"portable")
+            (dist / "SHA256SUMS.txt").write_text(
+                f"{'0' * 64}  Esports Isolator PRO Setup {version}.exe\n",
+                encoding="utf-8",
+            )
+            script = rf"""
+                const verifier = require('./ui/scripts/verify-installed-artifacts');
+                const result = {{ rejected: false, message: '' }};
+                try {{
+                  verifier.verifyReleaseArtifacts({{
+                    distDir: {json.dumps(str(dist))},
+                    version: {json.dumps(version)}
+                  }});
+                }} catch (error) {{
+                  result.rejected = true;
+                  result.message = error.message;
+                }}
+                console.log(JSON.stringify(result));
+            """
+            result = run_node(script)
+
+        self.assertTrue(result["rejected"])
+        self.assertIn("sha256sums", result["message"].lower())
 
     def test_backend_manifest_generator_emits_deterministic_sha256_schema(self):
         manifest = json.loads((ROOT / "ui" / "backend-manifest.json").read_text(encoding="utf-8"))
@@ -598,19 +689,24 @@ class BackendResourceIntegrityTests(unittest.TestCase):
         self.assertIn("npm --prefix ui run build:backend-manifest", release_check)
         self.assertIn("git diff --exit-code -- ui/backend-manifest.json", release_check)
         self.assertIn("npm --prefix ui run clean:packaged", release_check)
-        self.assertIn("node ui/scripts/clean-packaged-output.js $item", release_check)
+        self.assertIn("Remove-PackageOutputItem $packageOutput $item", release_check)
         self.assertIn("npm --prefix ui run verify:packaged-runtime", release_check)
+        self.assertIn("npm --prefix ui run verify:installed-artifacts", release_check)
+        self.assertIn("EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY", release_check)
 
     def test_docs_describe_packaged_runtime_provenance_policy(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         building = (ROOT / "BUILDING.md").read_text(encoding="utf-8")
-        combined = f"{readme}\n{building}"
+        release_readiness = (ROOT / "docs" / "release-readiness.md").read_text(encoding="utf-8")
+        combined = f"{readme}\n{building}\n{release_readiness}"
 
         self.assertIn("backend resource integrity manifest", combined)
         self.assertIn("EII_ALLOW_UNTRUSTED_PACKAGED_PYTHON", combined)
         self.assertIn("resources/backend", combined)
         self.assertIn("standard-user writable", combined)
         self.assertIn("trusted app bundle", combined)
+        self.assertIn("installed and portable artifact verification", combined)
+        self.assertIn("EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY", combined)
 
 
 if __name__ == "__main__":
