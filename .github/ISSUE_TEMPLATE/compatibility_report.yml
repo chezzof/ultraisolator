@@ -1,0 +1,93 @@
+name: Compatibility report
+description: Report game, anti-cheat, or Windows compatibility behavior
+title: "[Compatibility]: "
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for game, anti-cheat, launcher, overlay, or Windows behavior
+        that appears incompatible with Esports Isolator PRO. Do not request or
+        describe anti-cheat bypasses.
+  - type: input
+    id: game
+    attributes:
+      label: Game or workload
+      placeholder: "Counter-Strike 2"
+    validations:
+      required: true
+  - type: input
+    id: anti-cheat
+    attributes:
+      label: Anti-cheat / launcher / platform
+      placeholder: "VAC, FACEIT, BattleEye, Steam, Epic Games, none"
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 23H2 (build 22631)"
+    validations:
+      required: true
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "3.12.10"
+    validations:
+      required: true
+  - type: dropdown
+    id: administrator
+    attributes:
+      label: Administrator mode
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure"
+    validations:
+      required: true
+  - type: dropdown
+    id: background-jailing
+    attributes:
+      label: Background jailing
+      description: Was `enable_background_jailing` enabled?
+      options:
+        - "No"
+        - "Yes"
+        - "Not sure"
+    validations:
+      required: true
+  - type: dropdown
+    id: anti-cheat-mode
+    attributes:
+      label: anti_cheat_mode
+      options:
+        - "aggressive"
+        - "conservative"
+        - "Not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the blocked, skipped, failed, or unexpected behavior.
+      placeholder: "The log says an operation was blocked by anti-cheat, or the game closed after tuning..."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Paste only the relevant lines. Do not paste private config paths or full process lists without review.
+      render: shell
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      options:
+        - label: I am not requesting an anti-cheat bypass or tampering behavior
+          required: true
+        - label: I am not pasting private paths, tokens, or sensitive local configuration
+          required: true
