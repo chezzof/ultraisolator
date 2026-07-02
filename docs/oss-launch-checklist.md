@@ -4,17 +4,23 @@ Use this checklist before submitting Esports Isolator PRO to Codex for OSS or sh
 
 ## Repository
 
+- Confirm the repository owner is `chezzof` and the canonical URL is `https://github.com/chezzof/ultraisolator`.
 - Set the GitHub description to: `Windows process isolation and frame-time stability tool for competitive games.`
-- Add topics: `windows`, `gaming`, `performance`, `electron`, `react`, `python`, `process-management`, `cpu-sets`, `low-latency`, `frame-time`, `open-source`, `esports`.
+- Add topics: `windows`, `gaming`, `performance`, `electron`, `react`, `python`, `process-management`, `cpu-sets`, `low-latency`, `frame-time`, `open-source`, `esports`, `windows-optimization`, `desktop-app`, `benchmarking`.
 - Pin the benchmark report and screenshots in the README.
 - Confirm the Actions badge is green on the default branch.
+- Confirm the release badge does not claim a public release before one exists.
 - Confirm `config.json`, logs, and recovery files are ignored.
+- Upload `docs/social-preview.png` in GitHub: Settings -> General -> Social preview -> Edit -> Upload image.
 
 ## Release Story
 
 - Use source plus reproducible local build as the public release model.
+- No public release exists until one is explicitly published from a green default branch.
+- Treat `ui/package.json` as the source for the app version used by local package artifacts.
 - Publish the first security-hardening public release only after the release gate is green on `chezzof/ultraisolator`.
 - Do not claim a signed installer unless code signing is actually configured.
+- Checksums detect corruption; they do not authenticate publisher provenance without signed checksums or attestations.
 - Mention that packaged builds require a trusted absolute Python interpreter path.
 - Include Administrator and anti-cheat cautions in release notes.
 
@@ -23,6 +29,8 @@ Use this checklist before submitting Esports Isolator PRO to Codex for OSS or sh
 - Capture a short dashboard demo showing: start, game-mode/readiness state, topology view, logs, and settings.
 - Capture one before/after benchmark clip or screenshot set.
 - Keep screenshots current with the rendered UI.
+- Refresh README screenshots after Dashboard, Settings, or Topology UI changes.
+- Confirm visual regression and accessibility checks pass before using screenshots publicly.
 - Avoid fake metrics or unverified performance claims.
 
 ## Community Outreach
@@ -36,5 +44,5 @@ Use this checklist before submitting Esports Isolator PRO to Codex for OSS or sh
 
 - Problem: background Windows scheduling noise can hurt frame-time stability in competitive games.
 - Solution: reversible local process isolation with protected anti-cheat/system boundaries.
-- Evidence: CS2 VProf benchmark, unit tests, renderer build checks, smoke test, and screenshots.
+- Evidence: CS2 VProf benchmark, unit tests, renderer build checks, smoke test, visual/accessibility gate, release gate, and screenshots.
 - OSS value: transparent Windows API implementation, reproducible build docs, issue templates, and safety-focused contribution policy.

@@ -15,7 +15,7 @@ Repository-wide production hardening review for the Windows desktop release path
 
 | Area | Finding | Hardening |
 |------|---------|-----------|
-| Localhost API | Unauthenticated loopback callers could drive privileged API routes. | Per-launch bearer token is generated in Electron main, passed to the Python backend, exposed only through preload IPC, and required by API routes when configured. |
+| Localhost API | Unauthenticated loopback callers could drive privileged API routes. | Per-launch bearer token is generated and retained in Electron main, delivered to the Python backend outside renderer JavaScript, and applied only through allowlisted main-process proxy operations. |
 | Localhost API | Cross-origin browser requests could be rejected only after body reads. | Origin/token checks run before body consumption and request bodies are capped at 64 KiB. |
 | Electron | Packaged app could honor arbitrary `EII_RENDERER_URL`. | Packaged builds load only bundled renderer files; URL override remains dev-only and new windows/navigation are denied. |
 | Electron | Elevated packaged app could resolve Python through ambiguous PATH lookup. | Packaged builds require `EII_PYTHON` to be an absolute trusted interpreter path; PATH fallbacks remain development-only. |
@@ -32,10 +32,10 @@ powershell -File scripts/release-check.ps1
 git diff --check
 ```
 
-The release gate covers Python tests, config dry-run, npm audit, renderer build, deterministic asset generation, UI smoke test, Windows package build, checksum manifest generation, public docs checks, and local artifact ignore checks.
+The release gate covers Python tests, config dry-run, npm audit, renderer build, deterministic asset generation, UI smoke test, visual/accessibility quality checks, Windows package build, checksum manifest generation, public docs checks, and local artifact ignore checks.
 
 ## Remaining Deliberate Limits
 
 - Windows binaries are still unsigned; release notes must keep the SmartScreen/code-signing caveat.
 - Python is not bundled; packaged users must configure a trusted absolute `EII_PYTHON`.
-- Checksums detect corruption but do not authenticate release provenance. Signed checksums or Sigstore/GitHub attestations should be added before treating binary distribution as fully supply-chain hardened.
+- Checksums detect corruption but do not authenticate release provenance. Signed checksums, Sigstore attestations, or GitHub artifact attestations should be added before treating binary distribution as fully supply-chain hardened.

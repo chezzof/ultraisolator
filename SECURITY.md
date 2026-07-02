@@ -23,7 +23,8 @@ We will acknowledge receipt within 72 hours and aim to release a fix within 14 d
 - Recovery state (`jail_state.json`) can contain PIDs, process names, creation timestamps, CPU-set/priority state, and local tuning metadata; review it before sharing.
 - IFEO registry writes are scoped to game executables listed in the user's config.
 - Background jailing is opt-in and protected process lists are enforced before tuning.
-- The localhost API is intended for the bundled desktop UI and local machine only; production desktop launches protect it with a per-launch bearer token.
+- The localhost API is intended for the bundled desktop UI and local machine only; production desktop launches keep the per-launch bearer token out of renderer JavaScript and route UI calls through allowlisted Electron main-process operations.
+- Release checksums detect artifact corruption, but do not authenticate publisher provenance by themselves. Signed checksums, Sigstore attestations, or GitHub artifact attestations are future hardening work.
 
 ## Operational cautions
 
