@@ -4,6 +4,7 @@ Use this checklist before submitting Esports Isolator PRO to Codex for OSS or sh
 
 ## Repository
 
+- Use the detailed GitHub metadata and link checklist in [`docs/github-presentation-checklist.md`](github-presentation-checklist.md).
 - Confirm the repository owner is `chezzof` and the canonical URL is `https://github.com/chezzof/ultraisolator`.
 - Set the GitHub description to: `Windows process isolation and frame-time stability tool for competitive games.`
 - Add topics: `windows`, `gaming`, `performance`, `electron`, `react`, `python`, `process-management`, `cpu-sets`, `low-latency`, `frame-time`, `open-source`, `esports`, `windows-optimization`, `desktop-app`, `benchmarking`.

@@ -262,7 +262,7 @@ Contributions are welcome when they are testable and anti-cheat-aware. Start wit
 
 ## Security
 
-Report vulnerabilities privately through GitHub Security Advisories. See [SECURITY.md](SECURITY.md).
+Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/chezzof/ultraisolator/security/advisories/new). See [SECURITY.md](SECURITY.md).
 
 ## License
 
