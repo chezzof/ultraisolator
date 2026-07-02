@@ -4,7 +4,11 @@ This document defines the hypotheses that must hold before Esports Isolator PRO 
 
 The release is blocked until `scripts/release-check.ps1` passes.
 
-The first public release should use the version in `ui/package.json` as the artifact source of truth. Do not publish a GitHub Release from this documentation PR; use it to prepare the release narrative and checklist, then cut the release only after the final artifact gate is green.
+The first public release candidate is `1.1.1`, matching `ui/package.json`.
+Use the version in `ui/package.json` as the artifact source of truth. Do not
+publish a GitHub Release from this documentation PR; use it to prepare the
+release narrative and checklist, then cut the release only after the final
+artifact gate is green.
 
 ## Release Model
 
@@ -82,6 +86,14 @@ Passing args to a child process with shell option true can lead to security vuln
 This is emitted by the packaging toolchain after artifacts are produced. It is not an npm audit finding and does not currently block this source plus reproducible local build release. Treat it as a dependency/toolchain item to revisit when upgrading Electron Builder or Node.
 
 ## Production Go / No-Go
+
+Final gate note for `1.1.1` (2026-07-02): GO for release-candidate review
+after PR checks are green. The local gate passed with `npm ci`, `npm audit`
+with 0 vulnerabilities, 251 Python tests, renderer build, smoke test,
+visual/a11y UI-quality checks, Windows package build, packaged runtime
+verification, installed/portable artifact verification, full
+`scripts\release-check.ps1`, and `git diff --check`. This PR does not publish
+the GitHub Release.
 
 Go:
 

@@ -2,7 +2,7 @@
 
 Use this template when publishing a GitHub release.
 
-Release tag: `v<ui/package.json version>`.
+Release tag: `v1.1.1` (must match `ui/package.json`).
 
 ## Summary
 
