@@ -82,6 +82,23 @@ function Assert-TextClean {
   }
 }
 
+function Remove-PackageOutputItem {
+  param(
+    [Parameter(Mandatory = $true)][string]$PackageOutput,
+    [Parameter(Mandatory = $true)][string]$Path
+  )
+
+  $resolvedOutput = [System.IO.Path]::GetFullPath($PackageOutput)
+  $resolvedPath = [System.IO.Path]::GetFullPath($Path)
+  $separator = [System.IO.Path]::DirectorySeparatorChar
+  if ($resolvedPath -ne $resolvedOutput -and -not $resolvedPath.StartsWith("$resolvedOutput$separator", [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to remove path outside packaged output: $Path"
+  }
+  if (Test-Path -LiteralPath $resolvedPath) {
+    Remove-Item -LiteralPath $resolvedPath -Recurse -Force
+  }
+}
+
 Invoke-Step "Python unit tests" {
   python -m unittest discover -s tests -p "test_*.py" -v
 }
@@ -133,13 +150,12 @@ if (-not $SkipPackage) {
   }
 
   $byproducts = @(
-    (Join-Path $packageOutput "win-unpacked"),
     (Join-Path $packageOutput "$InstallerArtifact.blockmap"),
     (Join-Path $packageOutput "builder-debug.yml")
   )
   foreach ($item in $byproducts) {
     if (Test-Path -LiteralPath $item) {
-      node ui/scripts/clean-packaged-output.js $item
+      Remove-PackageOutputItem $packageOutput $item
     }
   }
 
@@ -148,6 +164,17 @@ if (-not $SkipPackage) {
   }
 
   Assert-ReleaseManifest $packageOutput
+
+  Invoke-Step "Installed and portable artifact verification" {
+    # EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY=1 is an explicit local
+    # development escape hatch handled by the verifier; release builds run it.
+    npm --prefix ui run verify:installed-artifacts
+  }
+
+  $winUnpacked = Join-Path $packageOutput "win-unpacked"
+  if (Test-Path -LiteralPath $winUnpacked) {
+    node ui/scripts/clean-packaged-output.js $winUnpacked
+  }
 }
 
 Write-Host "`n== Public surface checks ==" -ForegroundColor Cyan

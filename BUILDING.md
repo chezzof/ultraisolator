@@ -17,6 +17,8 @@ The current release model is **source plus reproducible local build**:
 
 - CI verifies the Python engine and renderer/smoke surface.
 - Local packaging creates NSIS and portable Windows artifacts under `ui/dist-packaged`.
+- Release validation extracts the installer and portable payloads with 7-Zip and
+  verifies the packaged backend runtime inside those downloaded artifacts.
 - Packaged production startup accepts only an allowlisted absolute interpreter path under a protected install root; any developer override is explicit and non-production only.
 - A backend resource integrity manifest is generated at build time and stored in the trusted app bundle.
 - Builds are not code-signed. Windows SmartScreen can warn on downloaded artifacts until a signing and reputation policy is added.
@@ -68,6 +70,9 @@ The build script runs:
 3. `node scripts/generate-backend-manifest.js` for `ui/backend-manifest.json`.
 4. `electron-builder --win nsis portable`.
 5. `scripts/release-manifest.ps1` from the release gate writes `SHA256SUMS.txt` for distributable artifacts.
+6. `npm --prefix ui run verify:installed-artifacts` validates the NSIS installer,
+   portable executable, checksum manifest, and extracted `resources/backend`
+   payloads.
 
 Artifacts are written to `ui/dist-packaged`.
 
@@ -84,6 +89,15 @@ powershell -File scripts/release-check.ps1 -SkipPackage
 ```
 
 The release hypotheses and go/no-go criteria are documented in [`docs/release-readiness.md`](docs/release-readiness.md).
+
+Installed and portable artifact verification requires 7-Zip so the release gate
+can inspect NSIS and portable payloads. The extracted payload check verifies
+manifest authority and backend hashes; ACL safety is checked on `win-unpacked`
+before cleanup because temporary extraction ACLs are not representative install
+ACLs. If `7z.exe` is not on `PATH`, set `EII_SEVEN_ZIP` to a trusted absolute
+extractor path. `EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY=1` is available
+only as an explicit local development escape hatch; do not use it for published
+artifacts.
 
 ## Packaging Model
 
@@ -146,4 +160,5 @@ npm --prefix ui run build:renderer
 npm --prefix ui run pack
 npm --prefix ui run build
 npm --prefix ui run verify:packaged-runtime
+npm --prefix ui run verify:installed-artifacts
 ```

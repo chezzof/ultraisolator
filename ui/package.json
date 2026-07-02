@@ -15,6 +15,7 @@
     "build:assets": "node scripts/generate-assets.js",
     "build:backend-manifest": "node scripts/generate-backend-manifest.js",
     "verify:packaged-runtime": "node scripts/verify-packaged-runtime.js",
+    "verify:installed-artifacts": "node scripts/verify-installed-artifacts.js",
     "clean:packaged": "node scripts/clean-packaged-output.js",
     "test:visual": "playwright test --config playwright.config.js tests/visual",
     "test:a11y": "playwright test --config playwright.config.js tests/a11y",

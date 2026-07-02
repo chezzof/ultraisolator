@@ -2,14 +2,17 @@
 
 const fs = require('fs');
 const path = require('path');
-const asar = require('@electron/asar');
 const runtime = require('../backend-runtime');
 
 const uiRoot = path.resolve(__dirname, '..');
 const packageConfig = require('../package.json');
 
-function findPackagedBackendRoot() {
-  const outputDir = path.join(uiRoot, packageConfig.build.directories.output || 'dist-packaged');
+function extractAsarFile(asarPath, filePath) {
+  const asar = require('@electron/asar');
+  return asar.extractFile(asarPath, filePath);
+}
+
+function findPackagedBackendRoot(outputDir = path.join(uiRoot, packageConfig.build.directories.output || 'dist-packaged')) {
   const candidates = [
     path.join(outputDir, 'win-unpacked', 'resources', 'backend'),
     path.join(outputDir, 'win-ia32-unpacked', 'resources', 'backend'),
@@ -27,7 +30,7 @@ function findPackagedManifestPath(backendRoot) {
   const resourcesRoot = path.dirname(backendRoot);
   const appAsar = path.join(resourcesRoot, 'app.asar');
   if (fs.existsSync(appAsar)) {
-    const bytes = asar.extractFile(appAsar, 'backend-manifest.json');
+    const bytes = extractAsarFile(appAsar, 'backend-manifest.json');
     return {
       manifestPath: path.join(appAsar, 'backend-manifest.json'),
       manifest: JSON.parse(Buffer.from(bytes).toString('utf8'))
@@ -60,7 +63,8 @@ function assertManifestCoversBuildConfig() {
   }
 }
 
-function assertPackagedPythonPolicy(resourcesRoot) {
+function assertPackagedPythonPolicy(resourcesRoot, options = {}) {
+  const writableCheck = options.isPathWritableByStandardUsers || runtime.isPathWritableByStandardUsers;
   const command = 'C:\\Users\\attacker\\python.exe';
   let rejectedArbitraryPython = false;
   try {
@@ -88,7 +92,7 @@ function assertPackagedPythonPolicy(resourcesRoot) {
       app: { isPackaged: true },
       bundledPythonPath,
       trustedRoots: [path.dirname(bundledPythonPath)],
-      isPathWritableByStandardUsers: runtime.isPathWritableByStandardUsers
+      isPathWritableByStandardUsers: writableCheck
     });
   } catch (error) {
     if (!fs.existsSync(bundledPythonPath) && String(error.message).toLowerCase().includes('missing')) {
@@ -98,17 +102,35 @@ function assertPackagedPythonPolicy(resourcesRoot) {
   }
 }
 
-function main() {
+function verifyPackagedRuntime(backendRoot, options = {}) {
   assertManifestCoversBuildConfig();
-  const backendRoot = process.argv[2] ? path.resolve(process.argv[2]) : findPackagedBackendRoot();
-  assertPackagedPythonPolicy(path.dirname(backendRoot));
-  const packagedManifest = findPackagedManifestPath(backendRoot);
+  const resolvedBackendRoot = backendRoot ? path.resolve(backendRoot) : findPackagedBackendRoot();
+  assertPackagedPythonPolicy(path.dirname(resolvedBackendRoot), options);
+  const packagedManifest = findPackagedManifestPath(resolvedBackendRoot);
   runtime.verifyBackendResourceIntegrity({
-    backendRoot,
+    backendRoot: resolvedBackendRoot,
     manifestPath: packagedManifest.manifestPath,
-    manifest: packagedManifest.manifest
+    manifest: packagedManifest.manifest,
+    isPathWritableByStandardUsers: options.isPathWritableByStandardUsers || runtime.isPathWritableByStandardUsers
   });
+  return resolvedBackendRoot;
+}
+
+function main() {
+  const backendRoot = verifyPackagedRuntime(process.argv[2]);
   console.log(`packaged runtime verified: ${backendRoot}`);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  assertManifestCoversBuildConfig,
+  assertPackagedPythonPolicy,
+  extractAsarFile,
+  findPackagedBackendRoot,
+  findPackagedManifestPath,
+  main,
+  verifyPackagedRuntime
+};

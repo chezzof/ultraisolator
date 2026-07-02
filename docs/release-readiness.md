@@ -29,11 +29,14 @@ npm --prefix ui run build:renderer
 npm --prefix ui run smoke
 npm --prefix ui run build
 npm --prefix ui run verify:packaged-runtime
+npm --prefix ui run verify:installed-artifacts
 powershell -ExecutionPolicy Bypass -File scripts\release-check.ps1
 git diff --check
 ```
 
-The release gate must create NSIS and portable artifacts under `ui/dist-packaged`, generate `SHA256SUMS.txt`, and leave no tracked generated-file drift.
+The release gate must create NSIS and portable artifacts under `ui/dist-packaged`,
+generate `SHA256SUMS.txt`, run installed and portable artifact verification, and
+leave no tracked generated-file drift.
 
 ## Hypotheses and Tests
 
@@ -47,6 +50,7 @@ The release gate must create NSIS and portable artifacts under `ui/dist-packaged
 | Local API bridge and built renderer surface are coherent | `npm --prefix ui run smoke` | smoke exits 0 |
 | Windows artifacts are reproducible locally | `npm --prefix ui run build` | NSIS and portable artifacts are written to `ui/dist-packaged` |
 | Release artifacts are verifiable | `powershell -File scripts/release-manifest.ps1` plus release gate manifest checks | installer and portable artifacts are non-empty, no unexpected root artifacts remain, and `SHA256SUMS.txt` contains exactly their SHA256 hashes |
+| Installed and portable artifact payloads are verifiable | `npm --prefix ui run verify:installed-artifacts` | NSIS and portable payloads extract successfully, contain `resources/backend`, use the trusted app-bundle manifest, and pass backend hash/runtime provenance checks; ACL safety is checked on `win-unpacked` before cleanup because temporary extraction ACLs are not representative install ACLs |
 | Public docs are ready for reviewers | `scripts/release-check.ps1` public surface checks | README, build docs, security docs, OSS checklist, templates, and screenshots exist |
 | Public text has no mojibake artifacts | `scripts/release-check.ps1` text checks and frontend contract tests | no common UTF-8 mojibake marker characters in checked files |
 | Sensitive local files are not publishable by default | `git check-ignore` checks in `scripts/release-check.ps1` | config, logs, recovery state, and package artifacts are ignored |
@@ -62,6 +66,10 @@ Run these checks after the automated gate:
 - Confirm `SHA256SUMS.txt` is uploaded with any public binary artifacts.
 - Confirm the Git tag, release title, and artifact version match the chosen first public release version.
 - If sharing artifacts publicly, test the installer and portable executable on a clean Windows user profile with `EII_PYTHON` pointing at a trusted absolute Python 3.12+ interpreter.
+- If installed artifact verification cannot find 7-Zip, install 7-Zip or set
+  `EII_SEVEN_ZIP` to a trusted `7z.exe` path. For local development only, set
+  `EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY=1`; release builds should not
+  use that skip.
 
 ## Known Non-Blocking Build Warning
 
@@ -82,6 +90,8 @@ Go:
 - Release notes disclose unsigned artifacts and trusted absolute `EII_PYTHON` requirement.
 - Release notes disclose Windows-only support, Administrator requirement, anti-cheat compatibility boundary, and opt-in background jailing.
 - Release artifacts include `SHA256SUMS.txt`.
+- Installed and portable artifact verification passes without
+  `EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY`.
 
 No-go:
 
@@ -90,3 +100,4 @@ No-go:
 - Python tests fail or config dry-run fails.
 - Screenshots do not match the shipped UI.
 - Release notes imply signed installer, bundled Python, PATH-based packaged Python lookup, cross-platform support, or anti-cheat bypass behavior.
+- Installed/portable payload extraction or backend resource verification fails.
