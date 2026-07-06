@@ -68,6 +68,8 @@ Run these checks after the automated gate:
 - Confirm `enable_background_jailing` remains disabled in `config.json.example`.
 - Confirm no local `config.json`, logs, package artifacts, or temporary QA files are staged.
 - Confirm `SHA256SUMS.txt` is uploaded with any public binary artifacts.
+- Use `docs/release-candidate-1.1.1.md` as the current release-candidate
+  evidence note when drafting the GitHub Release.
 - Confirm the Git tag, release title, and artifact version match the chosen first public release version.
 - If sharing artifacts publicly, test the installer and portable executable on a clean Windows user profile with `EII_PYTHON` pointing at a trusted absolute Python 3.12+ interpreter.
 - If installed artifact verification cannot find 7-Zip, install 7-Zip or set
@@ -87,7 +89,7 @@ This is emitted by the packaging toolchain after artifacts are produced. It is n
 
 ## Production Go / No-Go
 
-Final gate note for `1.1.1` (2026-07-02): GO for release-candidate review
+Final gate note for `1.1.1` (2026-07-06): GO for release-candidate review
 after PR checks are green. The local gate passed with `npm ci`, `npm audit`
 with 0 vulnerabilities, 251 Python tests, renderer build, smoke test,
 visual/a11y UI-quality checks, Windows package build, packaged runtime
