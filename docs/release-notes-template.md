@@ -8,7 +8,7 @@ Release tag: `v1.1.1` (must match `ui/package.json`).
 
 Esports Isolator PRO is a Windows-only process isolation tool for competitive games. It detects configured or discovered games, applies reversible CPU/process/power tuning, and restores the system after the session ends.
 
-This first public release candidate packages the current security-hardening baseline for source plus reproducible local Windows builds.
+This first public release packages the current security-hardening baseline for source plus reproducible local Windows builds.
 
 ## Artifacts
 

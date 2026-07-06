@@ -77,7 +77,7 @@ upload it once in Settings.
 
 - Hero banner: `docs/banner.svg`
 - Actions badge: `https://github.com/chezzof/ultraisolator/actions/workflows/tests.yml`
-- Release badge: `release-not published`
+- Release badge: `https://img.shields.io/github/v/release/chezzof/ultraisolator?sort=semver`
 - Releases link: `https://github.com/chezzof/ultraisolator/releases`
 - License link: `LICENSE`
 - Benchmark report: `benchmark-results-hud.html`
@@ -88,7 +88,9 @@ upload it once in Settings.
   - `docs/screenshots/settings.png`
   - `docs/screenshots/topology.png`
 
-The release badge must not claim a published release before one exists.
+Before the first public release, the badge must not claim a published release.
+After release publication, it should resolve to the latest semver GitHub
+Release.
 
 ## Security And Issue Intake
 
@@ -104,7 +106,7 @@ The release badge must not claim a published release before one exists.
 ## Release Claims
 
 - Current model: source plus reproducible local Windows build.
-- No public release is implied until one is explicitly published.
+- Public releases are represented only by explicit GitHub Releases.
 - Do not claim signed artifacts unless code signing is configured.
 - Checksums detect corruption but do not authenticate publisher provenance
   without signed checksums or attestations.
