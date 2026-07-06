@@ -16,9 +16,17 @@ This first public release packages the current security-hardening baseline for s
 - `Esports-Isolator-PRO-<version>-portable.exe`
 - `SHA256SUMS.txt`
 
-For `v1.1.1`, the expected artifact names are:
+For `v1.1.1`, the local build output names are:
 
 - `Esports Isolator PRO Setup 1.1.1.exe`
+- `Esports-Isolator-PRO-1.1.1-portable.exe`
+- `SHA256SUMS.txt`
+
+The public GitHub Release asset names are authoritative for download
+verification. GitHub normalizes spaces in the installer asset name during
+upload, so the published `v1.1.1` assets are:
+
+- `Esports.Isolator.PRO.Setup.1.1.1.exe`
 - `Esports-Isolator-PRO-1.1.1-portable.exe`
 - `SHA256SUMS.txt`
 
@@ -79,7 +87,8 @@ Expected gate coverage:
 
 ## Checksums
 
-Paste the contents of `ui/dist-packaged/SHA256SUMS.txt` here:
+Paste the contents of `ui/dist-packaged/SHA256SUMS.txt` here, then confirm the
+filenames exactly match the public GitHub Release asset names after upload:
 
 ```text
 

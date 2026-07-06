@@ -66,6 +66,8 @@ Run these checks after the automated gate:
 - Confirm `enable_background_jailing` remains disabled in `config.json.example`.
 - Confirm no local `config.json`, logs, package artifacts, or temporary QA files are staged.
 - Confirm `SHA256SUMS.txt` is uploaded with any public binary artifacts.
+- After upload, confirm `SHA256SUMS.txt` filenames exactly match the public
+  GitHub Release asset names. GitHub may normalize spaces in asset filenames.
 - Use `docs/release-candidate-1.1.1.md` as the current release-candidate
   evidence note when drafting the GitHub Release.
 - Confirm the Git tag, release title, and artifact version match the chosen first public release version.
