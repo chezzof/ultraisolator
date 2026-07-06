@@ -18,7 +18,8 @@ on 2026-07-06:
 
 These hashes describe the local release-candidate build captured by this note.
 Use the `SHA256SUMS.txt` asset attached to the published GitHub Release for
-final download verification.
+final download verification. For `v1.1.1`, GitHub normalized the public
+installer asset name to `Esports.Isolator.PRO.Setup.1.1.1.exe`.
 
 ```text
 db91ad911dfe604074bf4c0e57217de84e0354026d2147691add0631d272fd1d  Esports Isolator PRO Setup 1.1.1.exe
