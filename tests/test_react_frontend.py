@@ -785,6 +785,7 @@ class ReactFrontendContractTests(unittest.TestCase):
             ROOT / "docs" / "oss-launch-checklist.md",
             ROOT / "docs" / "release-readiness.md",
             ROOT / "docs" / "release-notes-template.md",
+            ROOT / "docs" / "post-release-validation.md",
             ROOT / "scripts" / "release-check.ps1",
             ROOT / "scripts" / "release-manifest.ps1",
             ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml",
@@ -802,6 +803,7 @@ class ReactFrontendContractTests(unittest.TestCase):
         readiness = (ROOT / "docs" / "release-readiness.md").read_text(encoding="utf-8")
         self.assertIn("Hypotheses and Tests", readiness)
         self.assertIn("Production Go / No-Go", readiness)
+        self.assertIn("docs/post-release-validation.md", readiness)
 
         release_check = (ROOT / "scripts" / "release-check.ps1").read_text(encoding="utf-8")
         for command in (
@@ -825,6 +827,39 @@ class ReactFrontendContractTests(unittest.TestCase):
         release_notes = (ROOT / "docs" / "release-notes-template.md").read_text(encoding="utf-8")
         self.assertIn("SHA256SUMS.txt", release_notes)
         self.assertIn("not code-signed", release_notes)
+
+    def test_post_release_validation_documents_public_download_checks(self):
+        validation = (ROOT / "docs" / "post-release-validation.md").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        bug_report = (ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml").read_text(encoding="utf-8")
+        compatibility_report = (
+            ROOT / ".github" / "ISSUE_TEMPLATE" / "compatibility_report.yml"
+        ).read_text(encoding="utf-8")
+
+        for required in (
+            "https://github.com/chezzof/ultraisolator/releases/tag/v1.1.1",
+            "Esports.Isolator.PRO.Setup.1.1.1.exe",
+            "Esports-Isolator-PRO-1.1.1-portable.exe",
+            "SHA256SUMS.txt",
+            "GitHub Release downloads",
+            "Silent installer evidence",
+            "cleanup-install-root-exists=False",
+            "Manual Fresh-User First-Run Matrix",
+            "Administrator",
+            "asInvoker",
+            "requireAdministrator",
+            "direct-createprocess-error=740",
+            "SmartScreen",
+            "EII_PYTHON",
+            "Support and Debug Report Path",
+        ):
+            self.assertIn(required, validation)
+
+        self.assertIn("docs/post-release-validation.md", readme)
+        self.assertIn("id: release-artifact", bug_report)
+        self.assertIn("id: release-artifact", compatibility_report)
+        self.assertIn("EII_PYTHON", bug_report)
+        self.assertIn("EII_PYTHON", compatibility_report)
 
 
 if __name__ == "__main__":

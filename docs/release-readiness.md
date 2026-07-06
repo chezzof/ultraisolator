@@ -72,6 +72,9 @@ Run these checks after the automated gate:
   evidence note when drafting the GitHub Release.
 - Confirm the Git tag, release title, and artifact version match the chosen first public release version.
 - If sharing artifacts publicly, test the installer and portable executable on a clean Windows user profile with `EII_PYTHON` pointing at a trusted absolute Python 3.12+ interpreter.
+- Track public-download and clean-user validation in
+  `docs/post-release-validation.md` after publishing. This record should use
+  GitHub Release downloads, not local `ui/dist-packaged` artifacts.
 - If installed artifact verification cannot find 7-Zip, install 7-Zip or set
   `EII_SEVEN_ZIP` to a trusted `7z.exe` path. For local development only, set
   `EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY=1`; release builds should not

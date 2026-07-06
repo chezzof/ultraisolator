@@ -147,6 +147,9 @@ powershell -File scripts/release-check.ps1
 
 That gate creates local NSIS installer and portable artifacts under `ui/dist-packaged`, writes `SHA256SUMS.txt`, and checks the packaged runtime provenance. Checksums detect artifact corruption but do not authenticate publisher provenance without signed checksums or attestations. Release notes must document the Windows-only scope, unsigned installer caveat, trusted Python requirement, Administrator requirement, anti-cheat boundary, and opt-in background jailing model before any artifacts are published.
 
+Public-download validation for the first release is tracked in
+[`docs/post-release-validation.md`](docs/post-release-validation.md).
+
 ## Configuration
 
 Copy [`config.json.example`](config.json.example) to `config.json` and edit.
