@@ -6,12 +6,10 @@ files alone.
 
 ## Current Metadata Audit
 
-Checked with `gh repo view chezzof/ultraisolator`:
+Checked with `gh repo view chezzof/ultraisolator` on 2026-07-06:
 
-- Current description: `Desktop security and performance isolation toolkit.`
-- Target description: `Windows process isolation and frame-time stability tool for competitive games.`
-- Current topics: `desktop`, `electron`, `isolation`, `python`, `security`, `windows`
-- Target topics:
+- Current description: `Windows process isolation and frame-time stability tool for competitive games.`
+- Current topics:
   - `windows`
   - `gaming`
   - `performance`
@@ -30,7 +28,9 @@ Checked with `gh repo view chezzof/ultraisolator`:
 
 ## Owner-Side Settings
 
-Run these only when you are ready to update repository Settings:
+The repository description and topics already match the target public
+presentation metadata. Keep these commands for recovery or future repo
+migration checks:
 
 ```powershell
 gh repo edit chezzof/ultraisolator `
@@ -59,6 +59,9 @@ If `gh repo edit` is unavailable, set the same description and topics through:
 `Settings -> General -> Repository details`.
 
 Do not buy stars, trade stars, use bots, or coordinate fake engagement.
+
+Remaining manual owner-side item before broad sharing: upload the social
+preview image in GitHub Settings.
 
 ## Social Preview
 

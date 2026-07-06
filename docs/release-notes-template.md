@@ -16,6 +16,12 @@ This first public release candidate packages the current security-hardening base
 - `Esports-Isolator-PRO-<version>-portable.exe`
 - `SHA256SUMS.txt`
 
+For `v1.1.1`, the expected artifact names are:
+
+- `Esports Isolator PRO Setup 1.1.1.exe`
+- `Esports-Isolator-PRO-1.1.1-portable.exe`
+- `SHA256SUMS.txt`
+
 Generate artifacts and checksums with:
 
 ```powershell
