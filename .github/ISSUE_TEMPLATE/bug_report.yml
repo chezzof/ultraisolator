@@ -26,6 +26,14 @@ body:
     validations:
       required: true
   - type: input
+    id: release-artifact
+    attributes:
+      label: Release artifact
+      description: Which artifact or checkout did you use?
+      placeholder: "v1.1.1 installer, v1.1.1 portable, source checkout, or local build"
+    validations:
+      required: true
+  - type: input
     id: windows-version
     attributes:
       label: Windows version
@@ -36,7 +44,8 @@ body:
     id: python-version
     attributes:
       label: Python version
-      placeholder: "3.12.4"
+      description: Include whether EII_PYTHON is set for packaged desktop builds.
+      placeholder: "3.12.4; EII_PYTHON=C:\\Program Files\\Python312\\python.exe"
     validations:
       required: true
   - type: input
