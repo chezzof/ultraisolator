@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/chezzof/ultraisolator/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/chezzof/ultraisolator/actions/workflows/tests.yml/badge.svg"></a>
-  <a href="https://github.com/chezzof/ultraisolator/releases"><img alt="Release" src="https://img.shields.io/badge/release-not%20published-lightgrey"></a>
+  <a href="https://github.com/chezzof/ultraisolator/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/chezzof/ultraisolator?sort=semver"></a>
   <a href="https://www.python.org/"><img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-blue"></a>
   <a href="ui"><img alt="Electron + React desktop UI" src="https://img.shields.io/badge/desktop-Electron%20%2B%20React-2f6f7d"></a>
   <img alt="Windows 10/11" src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows">
@@ -138,9 +138,8 @@ Production packaging is documented in [BUILDING.md](BUILDING.md).
 
 ## Release
 
-No public GitHub release has been published for `chezzof/ultraisolator` yet.
-
-Until the first public release is cut, build artifacts locally with the release gate:
+Published Windows artifacts are attached to GitHub Releases. To rebuild the
+same release package locally, run the release gate:
 
 ```powershell
 powershell -File scripts/release-check.ps1
