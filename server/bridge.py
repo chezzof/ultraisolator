@@ -1,12 +1,11 @@
 """Lifecycle bridge between the localhost API and EsportsIsolatorPro."""
 
 from contextlib import contextmanager
-import ctypes
-import os
 import threading
 import time
 
 from isolator.app import EsportsIsolatorPro
+from isolator.winapi import is_process_elevated
 from .analysis import build_analysis_payload
 from .config_store import ConfigStore
 from .log_store import read_log_payload
@@ -18,6 +17,10 @@ class BridgeConflict(RuntimeError):
     """Raised when a requested lifecycle action is not currently valid."""
 
 
+class AdministratorRequired(PermissionError):
+    """Raised before a privileged lifecycle action in a non-elevated process."""
+
+
 def _default_engine_factory(config_path, scan_game_libraries):
     return EsportsIsolatorPro(
         config_path=config_path,
@@ -26,10 +29,11 @@ def _default_engine_factory(config_path, scan_game_libraries):
 
 
 class IsolatorBridge:
-    def __init__(self, config_path="config.json", engine_factory=None, config_store=None):
+    def __init__(self, config_path="config.json", engine_factory=None, config_store=None, admin_check=None):
         self.config_path = config_path
         self._engine_factory = engine_factory or _default_engine_factory
         self._config_store = config_store or ConfigStore(config_path)
+        self._admin_check = admin_check or is_process_elevated
         self._lock = threading.Lock()
         # FIX 5: dedicated lifecycle lock serializes start()/stop() so a new
         # engine is never built while a previous one is still shutting down.
@@ -60,12 +64,14 @@ class IsolatorBridge:
         }
 
     def _check_current_admin(self):
-        if os.name != "nt":
-            return False
         try:
-            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+            return bool(self._admin_check())
         except Exception:
             return False
+
+    def _require_admin(self):
+        if not self._check_current_admin():
+            raise AdministratorRequired("administrator_required")
 
     @staticmethod
     def _release_transient_engine(engine):
@@ -83,7 +89,9 @@ class IsolatorBridge:
         config = dict(self._status_config)
         return {
             "running": False,
+            "monitoring_active": False,
             "game_mode": False,
+            "active_games": [],
             "active_game_pids": [],
             "active_game_count": 0,
             "tracked_process_count": 0,
@@ -101,7 +109,9 @@ class IsolatorBridge:
             "timer_resolution_applied": None,
             "persistent_recovery_incomplete": False,
             "reported_failure_count": 0,
+            "capability_issues": [],
             "capability_notes": [],
+            "discovery_issues": [],
             "cpu_partitions": {"game": 0, "background": 0, "housekeeping": 0, "game_cores": 0},
             "topology_available": False,
             "config": config,
@@ -192,6 +202,7 @@ class IsolatorBridge:
                 "info",
                 "Isolator started" if current["running"] else "Isolator stopped",
                 "The engine is running." if current["running"] else "The engine has stopped and restored state.",
+                data={"monitoring_active": current["running"]},
             ))
         if previous["game_mode"] != current["game_mode"]:
             if current["game_mode"]:
@@ -202,6 +213,7 @@ class IsolatorBridge:
                     "Game mode active",
                     f"Detected game process PID {pids}.",
                     suppress_in_game_mode=True,
+                    data={"pids": list(current["active_game_pids"])},
                 ))
             else:
                 events.append(self._notification(
@@ -209,6 +221,7 @@ class IsolatorBridge:
                     "info",
                     "Game mode ended",
                     "Game processes closed; restore flow can complete.",
+                    data={"pids": list(previous["active_game_pids"])},
                 ))
         if current["jailed_process_count"] > previous["jailed_process_count"]:
             delta = current["jailed_process_count"] - previous["jailed_process_count"]
@@ -218,6 +231,7 @@ class IsolatorBridge:
                 "Background jailing updated",
                 f"{delta} additional background process{'es' if delta != 1 else ''} jailed.",
                 suppress_in_game_mode=True,
+                data={"count": delta},
             ))
         if previous["power_plan_active"] != current["power_plan_active"]:
             events.append(self._notification(
@@ -226,6 +240,7 @@ class IsolatorBridge:
                 "Power plan active" if current["power_plan_active"] else "Power plan restored",
                 "Performance power plan is active." if current["power_plan_active"] else "Original power plan restored.",
                 suppress_in_game_mode=current["power_plan_active"],
+                data={"active": current["power_plan_active"]},
             ))
         if current["reported_failure_count"] > previous["reported_failure_count"]:
             events.append(self._notification(
@@ -233,15 +248,20 @@ class IsolatorBridge:
                 "error",
                 "Isolator reported a failure",
                 "Open Logs for recovery details.",
+                data={
+                    "count": current["reported_failure_count"],
+                    "new_count": current["reported_failure_count"] - previous["reported_failure_count"],
+                },
             ))
         return events
 
-    def _notification(self, event_type, severity, title, message, suppress_in_game_mode=False):
+    def _notification(self, event_type, severity, title, message, suppress_in_game_mode=False, data=None):
         return {
             "type": event_type,
             "severity": severity,
             "title": title,
             "message": message,
+            "data": dict(data or {}),
             "suppress_in_game_mode": bool(suppress_in_game_mode),
         }
 
@@ -396,6 +416,7 @@ class IsolatorBridge:
         return payload
 
     def start(self):
+        self._require_admin()
         # FIX 5: hold the lifecycle lock across the whole start transition so a
         # racing stop() cannot tear down (or a second start build) a competing
         # engine mid-flight, which previously spawned two monitor threads / a
@@ -438,6 +459,7 @@ class IsolatorBridge:
             return {"ok": True, "status": self._stopped_status()}
 
     def recover(self):
+        self._require_admin()
         with self._lock:
             engine = self._engine
             if engine is not None and engine.get_runtime_status().get("running"):

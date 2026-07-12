@@ -1,19 +1,30 @@
 export const APP_SETTINGS_STORAGE_KEY = 'eii_app_settings';
 
+export const APP_SETTINGS_VERSION = 3;
+
 export const DEFAULT_APP_SETTINGS = {
+  settingsVersion: APP_SETTINGS_VERSION,
+  revision: 0,
   language: 'en',
   launchAtWindowsStartup: false,
   minimizeToTrayOnStart: false,
-  startIsolatorAutomatically: false,
   notificationToastsEnabled: true,
   firstRunCompleted: false
 };
+
+export const APP_SETTINGS_KEYS = [
+  'language',
+  'launchAtWindowsStartup',
+  'minimizeToTrayOnStart',
+  'notificationToastsEnabled',
+  'firstRunCompleted'
+];
 
 export const CONFIG_PRESETS = [
   {
     id: 'competitive',
     label: 'Competitive',
-    detail: 'Fast active polling, background jailing enabled, aggressive anti-cheat policy.',
+    detail: 'Fast game detection, active background control, and strict anti-cheat compatibility.',
     config: {
       poll_interval_active_ms: 2000,
       enable_background_jailing: true,
@@ -27,7 +38,7 @@ export const CONFIG_PRESETS = [
   {
     id: 'casual',
     label: 'Casual',
-    detail: 'Lower UI/runtime activity and no background jailing by default.',
+    detail: 'Lower background activity with conservative game compatibility.',
     config: {
       poll_interval_active_ms: 5000,
       enable_background_jailing: false,
@@ -41,7 +52,7 @@ export const CONFIG_PRESETS = [
   {
     id: 'streaming',
     label: 'Streaming',
-    detail: 'Keeps extra housekeeping room for capture, chat, and encoder tools.',
+    detail: 'Keeps extra CPU room for capture, chat, and encoder apps.',
     config: {
       poll_interval_active_ms: 3000,
       enable_background_jailing: true,
@@ -56,11 +67,13 @@ export const CONFIG_PRESETS = [
 
 export const CONFIG_SECTIONS = [
   {
-    title: 'Game Detection',
+    id: 'games',
+    title: 'Games & libraries',
     fields: ['games', 'auto_detect_steam_games', 'auto_detect_epic_games', 'steam_library_paths', 'epic_library_paths']
   },
   {
-    title: 'Jailing',
+    id: 'background',
+    title: 'Background isolation',
     fields: [
       'enable_background_jailing',
       'maintenance_jail_batch_size',
@@ -70,19 +83,20 @@ export const CONFIG_SECTIONS = [
     ]
   },
   {
-    title: 'Timing',
+    id: 'detection',
+    title: 'Detection & recovery',
     fields: [
       'poll_interval_active_ms',
       'poll_interval_idle_ms',
-      'housekeeping_cores',
       'game_close_debounce_s',
-      'game_exit_restore_delay_s',
-      'gc_full_collect_interval_s'
+      'game_exit_restore_delay_s'
     ]
   },
   {
-    title: 'Protection',
+    id: 'tuning',
+    title: 'Game tuning',
     fields: [
+      'housekeeping_cores',
       'disable_power_scheme_switch',
       'disable_timer_resolution_tweak',
       'disable_game_priority_boost',
@@ -91,8 +105,10 @@ export const CONFIG_SECTIONS = [
     ]
   },
   {
-    title: 'Advanced',
+    id: 'specialists',
+    title: 'For specialists',
     fields: [
+      'gc_full_collect_interval_s',
       'hot_thread_limit',
       'thread_sample_window_ms',
       'enable_hot_thread_tuning',
@@ -106,41 +122,47 @@ export const CONFIG_SECTIONS = [
 
 export const FIELD_LABELS = {
   games: 'Games',
-  auto_detect_steam_games: 'Auto-detect Steam games',
-  auto_detect_epic_games: 'Auto-detect Epic games',
-  steam_library_paths: 'Steam library paths',
-  epic_library_paths: 'Epic library paths',
-  enable_background_jailing: 'Enable background jailing',
-  maintenance_jail_batch_size: 'Maintenance jail batch size',
-  maintenance_jail_interval_ms: 'Maintenance jail interval',
-  maintenance_jail_batch_cooldown_ms: 'Maintenance jail cooldown',
-  maintenance_skip_after_quiet_cycles: 'Skip after quiet cycles',
-  poll_interval_active_ms: 'Active poll interval',
-  poll_interval_idle_ms: 'Idle poll interval',
-  housekeeping_cores: 'Housekeeping cores',
-  disable_power_scheme_switch: 'Disable power scheme switch',
-  disable_timer_resolution_tweak: 'Disable timer resolution tweak',
-  disable_game_priority_boost: 'Disable game priority boost',
-  game_close_debounce_s: 'Game close debounce',
-  game_exit_restore_delay_s: 'Game exit restore delay',
-  gc_full_collect_interval_s: 'Full GC collect interval',
-  anti_cheat_mode: 'Anti-cheat mode',
-  protected_extra: 'Protected extra',
-  log_file: 'Log file',
-  hot_thread_limit: 'Hot thread limit',
+  auto_detect_steam_games: 'Find Steam games automatically',
+  auto_detect_epic_games: 'Find Epic games automatically',
+  steam_library_paths: 'Steam library folders',
+  epic_library_paths: 'Epic library folders',
+  enable_background_jailing: 'Limit background apps while gaming',
+  maintenance_jail_batch_size: 'Apps handled per pass',
+  maintenance_jail_interval_ms: 'Background review interval',
+  maintenance_jail_batch_cooldown_ms: 'Pause between background passes',
+  maintenance_skip_after_quiet_cycles: 'Pause after quiet passes',
+  poll_interval_active_ms: 'Game detection interval',
+  poll_interval_idle_ms: 'Idle detection interval',
+  housekeeping_cores: 'System-reserved CPU cores',
+  disable_power_scheme_switch: 'Automatic performance power mode',
+  disable_timer_resolution_tweak: 'Low-latency timer',
+  disable_game_priority_boost: 'Game priority boost',
+  game_close_debounce_s: 'Game close confirmation',
+  game_exit_restore_delay_s: 'Restore delay after game',
+  gc_full_collect_interval_s: 'Memory cleanup interval',
+  anti_cheat_mode: 'Anti-cheat compatibility',
+  protected_extra: 'Additional protected apps',
+  log_file: 'Activity log file',
+  hot_thread_limit: 'Busy-thread limit',
   thread_sample_window_ms: 'Thread sample window',
-  enable_hot_thread_tuning: 'Enable hot thread tuning',
-  hot_thread_refresh_ms: 'Hot thread refresh',
-  event_backend: 'Event backend',
-  allow_mmcss_injection: 'Allow MMCSS injection'
+  enable_hot_thread_tuning: 'Busy-thread tuning',
+  hot_thread_refresh_ms: 'Busy-thread review interval',
+  event_backend: 'Process event source',
+  allow_mmcss_injection: 'Windows multimedia scheduling integration'
 };
 
+export const POSITIVE_BOOLEAN_FIELDS = new Set([
+  'disable_power_scheme_switch',
+  'disable_timer_resolution_tweak',
+  'disable_game_priority_boost'
+]);
+
 export const FIELD_HINTS = {
-  games: 'One executable per line. Bare names are normalized to .exe by the API.',
-  steam_library_paths: 'One Steam library path per line.',
-  epic_library_paths: 'One Epic library path per line.',
-  protected_extra: 'Processes that must never be jailed, one name per line.',
+  games: 'One executable per line. Names without .exe are completed automatically.',
+  steam_library_paths: 'One Steam library folder per line.',
+  epic_library_paths: 'One Epic library folder per line.',
+  protected_extra: 'Apps that must always remain unchanged, one name per line.',
   log_file: 'Leave empty to disable file logging.',
-  enable_hot_thread_tuning: 'Keep disabled for competitive mode unless explicitly testing.',
-  allow_mmcss_injection: 'Advanced Windows multimedia scheduler hook.'
+  enable_hot_thread_tuning: 'Leave off for competitive play unless you are testing it deliberately.',
+  allow_mmcss_injection: 'Advanced Windows multimedia scheduling option.'
 };

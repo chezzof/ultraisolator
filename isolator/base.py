@@ -3,6 +3,37 @@
 from .winapi import *
 
 
+_CAPABILITY_METADATA = {
+    "Administrator rights not detected: HKLM IFEO writes are disabled.": (
+        "administrator_required", "error"
+    ),
+    "Protected/system processes may reject tuning requests and will be skipped.": (
+        "protected_process_access_limited", "warning"
+    ),
+    "Only the polling backend is implemented in this build. Falling back to poll mode.": (
+        "event_backend_fallback", "warning"
+    ),
+    "Remote MMCSS injection is disabled by design. Ignoring allow_mmcss_injection=true.": (
+        "mmcss_injection_unavailable", "warning"
+    ),
+    "Steam auto-detection enabled.": ("steam_auto_detection_enabled", "info"),
+    "Epic Games auto-detection enabled.": ("epic_auto_detection_enabled", "info"),
+    "IFEO writes were denied by the OS. Session-only IFEO rollback is unavailable.": (
+        "ifeo_write_denied", "warning"
+    ),
+    "GetSystemCpuSetInformation did not return topology data. CPU Sets optimizations are disabled.": (
+        "cpu_topology_unavailable", "warning"
+    ),
+    "Single-core system detected: CPU isolation is ineffective. Only priority adjustments will be applied.": (
+        "single_core_cpu", "warning"
+    ),
+    (
+        "Detected CPU partition spanning multiple processor groups; "
+        "affinity fallback is unavailable for processes where CPU Sets API fails (e.g. WoW64)."
+    ): ("processor_groups_affinity_limited", "warning"),
+}
+
+
 class BaseMixin:
     def _register_capability_defaults(self):
         if not self._is_admin:
@@ -19,10 +50,29 @@ class BaseMixin:
         if self.auto_detect_epic:
             self._note_capability("Epic Games auto-detection enabled.")
 
-    def _note_capability(self, message):
+    def _note_capability(self, message, code=None, data=None, severity=None):
+        message = str(message)
         if message not in self._capability_notes_seen:
             self._capability_notes_seen.add(message)
             self._capability_notes.append(message)
+
+        metadata = _CAPABILITY_METADATA.get(message)
+        issue_code = str(code or (metadata[0] if metadata else "diagnostic_fallback"))
+        issue_severity = str(severity or (metadata[1] if metadata else "warning"))
+        issue_data = dict(data or {})
+        if not metadata and code is None:
+            issue_data.setdefault("message", message)
+
+        seen_key = (issue_code, message if issue_code == "diagnostic_fallback" else None)
+        if seen_key in self._capability_issues_seen:
+            return
+        self._capability_issues_seen.add(seen_key)
+        self._capability_issues.append({
+            "code": issue_code,
+            "data": issue_data,
+            "severity": issue_severity,
+            "message": message,
+        })
 
     def set_log_file(self, path):
         self._close_log_file()
@@ -101,31 +151,7 @@ class BaseMixin:
             self._reported_failures.pop(oldest, None)
 
     def _check_admin(self):
-        # WHY: Prefer TokenElevation over IsUserAnAdmin. IsUserAnAdmin
-        # is documented as deprecated and on systems with split UAC tokens
-        # it can report False even though the token can be elevated. The
-        # TokenElevation query asks the kernel directly whether the CURRENT
-        # token is running elevated. Fall back to IsUserAnAdmin if the
-        # token APIs are unavailable.
-        try:
-            token_handle = wintypes.HANDLE()
-            if advapi32.OpenProcessToken(kernel32.GetCurrentProcess(), TOKEN_QUERY, ctypes.byref(token_handle)):
-                try:
-                    elevation = TOKEN_ELEVATION()
-                    length = wintypes.DWORD()
-                    if advapi32.GetTokenInformation(
-                            token_handle, TokenElevation,
-                            ctypes.byref(elevation), ctypes.sizeof(elevation),
-                            ctypes.byref(length)):
-                        return bool(elevation.TokenIsElevated)
-                finally:
-                    kernel32.CloseHandle(token_handle)
-        except Exception:
-            pass
-        try:
-            return bool(shell32.IsUserAnAdmin())
-        except Exception:
-            return False
+        return is_process_elevated()
 
     def _load_config(self):
         from server.config_store import ConfigError, ConfigStore

@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Tag } from '@carbon/react';
 import NotificationIcon from '@carbon/icons-react/es/Notification.js';
 import CloseIcon from '@carbon/icons-react/es/Close.js';
-import { DEFAULT_APP_SETTINGS } from '../constants/settings.js';
-import { loadAppSettings } from '../utils/appSettings.js';
+import { useI18n } from '../i18n.jsx';
+import { useAppSettings } from '../state/AppSettingsContext.jsx';
 
 const TOAST_TTL_MS = 6500;
 
@@ -17,38 +17,29 @@ function severityTagType(severity) {
   return 'green';
 }
 
-function formatNotificationTime(value) {
+function formatNotificationTime(value, language) {
   if (!value) {
     return '-';
   }
-  return new Date(value * 1000).toLocaleTimeString();
+  return new Date(value * 1000).toLocaleTimeString(language === 'ru' ? 'ru-RU' : 'en-US');
+}
+
+function notificationText(notification, field, t) {
+  const explicitKey = notification?.[`${field}_key`];
+  const key = explicitKey || `notification.${notification?.key || notification?.type || 'event'}.${field}`;
+  const fallback = notification?.[field] || (field === 'title' ? 'UltraIsolator' : '');
+  return t(key, fallback, notification?.data || {});
 }
 
 export function NotificationCenter({ live }) {
+  const { language, t } = useI18n();
+  const { settings } = useAppSettings();
   const [open, setOpen] = useState(false);
-  const [settings, setSettings] = useState(DEFAULT_APP_SETTINGS);
   const [toastIds, setToastIds] = useState([]);
   const seenToastIds = useRef(new Set());
   const notifications = Array.isArray(live.notifications) ? live.notifications : [];
   const gameMode = Boolean(live.snapshot?.status?.game_mode);
   const toastsEnabled = settings.notificationToastsEnabled !== false;
-
-  useEffect(() => {
-    let disposed = false;
-    loadAppSettings().then((payload) => {
-      if (!disposed) {
-        setSettings(payload);
-      }
-    });
-    const onSettingsUpdated = (event) => {
-      setSettings(event.detail || DEFAULT_APP_SETTINGS);
-    };
-    window.addEventListener('app-settings-updated', onSettingsUpdated);
-    return () => {
-      disposed = true;
-      window.removeEventListener('app-settings-updated', onSettingsUpdated);
-    };
-  }, []);
 
   useEffect(() => {
     if (!toastsEnabled || gameMode || notifications.length === 0) {
@@ -88,16 +79,16 @@ export function NotificationCenter({ live }) {
         {toastNotifications.map((notification) => (
           <section key={notification.id} className={`notification-toast ${notification.severity || 'info'}`}>
             <div className="notification-toast-header">
-              <span>{notification.title}</span>
+              <span>{notificationText(notification, 'title', t)}</span>
               <button
                 type="button"
-                aria-label="Dismiss notification"
+                aria-label={t('notifications.dismiss', 'Dismiss notification')}
                 onClick={() => setToastIds((current) => current.filter((id) => id !== notification.id))}
               >
                 <CloseIcon size={14} />
               </button>
             </div>
-            <div className="notification-toast-message">{notification.message}</div>
+            <div className="notification-toast-message">{notificationText(notification, 'message', t)}</div>
           </section>
         ))}
       </div>
@@ -106,6 +97,7 @@ export function NotificationCenter({ live }) {
         type="button"
         className={`notification-drawer-toggle${open ? ' open' : ''}`}
         aria-expanded={open}
+        aria-label={t('notifications.open', 'Open notification history')}
         aria-controls="notification-history"
         onClick={() => setOpen((current) => !current)}
       >
@@ -114,13 +106,13 @@ export function NotificationCenter({ live }) {
       </button>
 
       {open ? (
-        <aside className="notification-history-drawer" id="notification-history" aria-label="Notification history">
+        <aside className="notification-history-drawer" id="notification-history" aria-label={t('notifications.history', 'Notification history')}>
           <div className="notification-history-header">
             <div>
-              <div className="module-title">Notifications</div>
-              <div className="notification-history-subtitle">Memory-only session history</div>
+              <div className="module-title">{t('notifications.title', 'Notifications')}</div>
+              <div className="notification-history-subtitle">{t('notifications.sessionHistory', 'Notifications from this session')}</div>
             </div>
-            <button type="button" aria-label="Close notifications" onClick={() => setOpen(false)}>
+            <button type="button" aria-label={t('notifications.close', 'Close notifications')} onClick={() => setOpen(false)}>
               <CloseIcon size={16} />
             </button>
           </div>
@@ -129,18 +121,17 @@ export function NotificationCenter({ live }) {
             {notifications.length ? notifications.map((notification) => (
               <article key={notification.id} className={`notification-history-item ${notification.severity || 'info'}`}>
                 <div className="notification-history-top">
-                  <strong>{notification.title}</strong>
-                  <Tag type={severityTagType(notification.severity)}>{notification.severity || 'info'}</Tag>
+                  <strong>{notificationText(notification, 'title', t)}</strong>
+                  <Tag type={severityTagType(notification.severity)}>{t(`checkStatus.${notification.severity || 'info'}`, notification.severity || 'info')}</Tag>
                 </div>
-                <div className="notification-history-message">{notification.message}</div>
+                <div className="notification-history-message">{notificationText(notification, 'message', t)}</div>
                 <div className="notification-history-meta">
-                  <span>{notification.type}</span>
-                  <span>{formatNotificationTime(notification.timestamp)}</span>
-                  {notification.suppress_in_game_mode ? <span>suppress_in_game_mode</span> : null}
+                  <span>{formatNotificationTime(notification.timestamp, language)}</span>
+                  {notification.suppress_in_game_mode ? <span>{t('notifications.quietDuringGame', 'Quiet during gameplay')}</span> : null}
                 </div>
               </article>
             )) : (
-              <div className="module-empty">No notifications in this session</div>
+              <div className="module-empty">{t('notifications.empty', 'No notifications in this session')}</div>
             )}
           </div>
         </aside>

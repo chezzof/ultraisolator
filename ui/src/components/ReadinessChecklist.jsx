@@ -3,7 +3,18 @@ import { Tag, Tile } from '@carbon/react';
 import { requestJson } from '../utils/api.js';
 import { useI18n } from '../i18n.jsx';
 
-const CORE_CHECK_ORDER = ['Power plan', 'Timer resolution', 'Background jailing', 'IFEO priority'];
+const CORE_CHECK_ORDER = [
+  'configured_games',
+  'admin',
+  'engine_running',
+  'power_plan',
+  'timer_resolution',
+  'background_jailing',
+  'ifeo_priority',
+  'topology',
+  'recovery'
+];
+const STATUS_ORDER = { error: 0, warning: 1, ok: 2, info: 3 };
 
 function checkTone(status) {
   if (status === 'ok') {
@@ -12,11 +23,14 @@ function checkTone(status) {
   if (status === 'error') {
     return 'red';
   }
+  if (status === 'info') {
+    return 'gray';
+  }
   return 'yellow';
 }
 
-function checkOrder(label) {
-  const index = CORE_CHECK_ORDER.indexOf(label);
+function checkOrder(check) {
+  const index = CORE_CHECK_ORDER.indexOf(check.id);
   return index === -1 ? CORE_CHECK_ORDER.length : index;
 }
 
@@ -29,7 +43,7 @@ function checkLabel(check, t) {
 }
 
 function checkDetail(check, t) {
-  return t(`readiness.check.${check.id}.${check.status}`, check.detail);
+  return t(`readiness.check.${check.id}.${check.status}`, check.detail, check.data || {});
 }
 
 export function ReadinessChecklist({ live }) {
@@ -75,18 +89,29 @@ export function ReadinessChecklist({ live }) {
   const checks = Array.isArray(payload?.checks) ? payload.checks : [];
   const summary = payload?.summary || {};
   const topChecks = useMemo(() => [...checks].sort((left, right) => (
-    checkOrder(left.label) - checkOrder(right.label)
-  )).slice(0, 8), [checks]);
+    (STATUS_ORDER[left.status] ?? 3) - (STATUS_ORDER[right.status] ?? 3)
+    || checkOrder(left) - checkOrder(right)
+  )).slice(0, 9), [checks]);
+  const nextAction = topChecks.find((check) => check.status === 'error')
+    || topChecks.find((check) => check.status === 'warning');
 
   return (
     <Tile className="module-surface readiness-panel">
       <div className="analysis-header">
         <div>
-          <div className="module-title">{t('readiness.title', 'Game Readiness')}</div>
+          <div className="module-title">{t('readiness.title', 'Game readiness')}</div>
           <div className="analysis-subtitle">
             {payload?.available
-              ? t('readiness.readyCount', '{{ok}}/{{total}} checks ready').replace('{{ok}}', summary.ok || 0).replace('{{total}}', summary.total || 0)
-              : (hiddenWindow ? t('readiness.pausedHidden', 'Readiness checks paused while the window is hidden') : t('readiness.pausedGame', 'Readiness checks paused during game mode'))}
+              ? nextAction
+                ? t('readiness.nextAction', 'Next: {{action}}', { action: checkLabel(nextAction, t) })
+                : t('readiness.readyCount', '{{ok}}/{{total}} checks ready', { ok: summary.ok || 0, total: summary.total || 0 })
+              : gameMode
+                ? t('readiness.pausedGame', 'Readiness checks pause while a game is active')
+                : hiddenWindow
+                  ? t('readiness.pausedHidden', 'Readiness checks pause while the window is hidden')
+                  : state.loading
+                    ? t('readiness.loading', 'Loading readiness')
+                    : t('readiness.unavailable', 'Readiness details are temporarily unavailable')}
           </div>
         </div>
         <div className="analysis-actions">
@@ -102,24 +127,20 @@ export function ReadinessChecklist({ live }) {
 
       <div className="readiness-summary">
         <div>
-          <span>{t('checkStatus.ok', 'OK')}</span>
+          <span>{t('checkStatus.ok', 'Ready')}</span>
           <strong>{summary.ok ?? 0}</strong>
         </div>
         <div>
-          <span>{t('analysis.warnings', 'Warnings')}</span>
+          <span>{t('checkStatus.warning', 'Review')}</span>
           <strong>{summary.warning ?? 0}</strong>
         </div>
         <div>
-          <span>{t('readiness.errors', 'Errors')}</span>
+          <span>{t('checkStatus.error', 'Action required')}</span>
           <strong>{summary.error ?? 0}</strong>
-        </div>
-        <div>
-          <span>{t('readiness.cache', 'Cache')}</span>
-          <strong>{payload?.cache?.hit ? t('readiness.cacheHit', 'HIT') : t('readiness.cacheFresh', 'FRESH')}</strong>
         </div>
       </div>
 
-      <div className="readiness-check-list" aria-label="Game readiness checklist">
+      <div className="readiness-check-list" aria-label={t('readiness.checkList', 'Game readiness checks')}>
         {topChecks.length ? topChecks.map((check) => (
           <article key={check.id} className={`readiness-check ${check.status}`}>
             <div className="readiness-check-top">

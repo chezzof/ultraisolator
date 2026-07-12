@@ -9,11 +9,11 @@ export function formatTimerResolution(value) {
   return `${milliseconds.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} ms`;
 }
 
-export function formatPartitions(partitions = {}) {
+export function formatPartitions(partitions = {}, labels = {}) {
   const game = partitions.game_cores ?? partitions.game ?? 0;
   const background = partitions.background ?? 0;
   const housekeeping = partitions.housekeeping ?? 0;
-  return `G ${game} / B ${background} / HK ${housekeeping}`;
+  return `${labels.game || 'Game'} ${game} · ${labels.background || 'Background'} ${background} · ${labels.system || 'System'} ${housekeeping}`;
 }
 
 export function formatPriorityClass(priorityClass) {

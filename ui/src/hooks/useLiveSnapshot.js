@@ -20,9 +20,14 @@ function normalizeSnapshot(snapshot) {
 
 function normalizeNotification(notification) {
   const fallbackId = `${notification?.type || 'event'}-${notification?.timestamp || Date.now()}`;
+  const data = notification?.data && typeof notification.data === 'object' ? notification.data : {};
   return {
     id: notification?.id || fallbackId,
     type: notification?.type || 'event',
+    key: notification?.key || notification?.code || notification?.type || 'event',
+    title_key: notification?.title_key || data.title_key || null,
+    message_key: notification?.message_key || data.message_key || null,
+    data,
     severity: notification?.severity || 'info',
     title: notification?.title || 'Isolator event',
     message: notification?.message || '',

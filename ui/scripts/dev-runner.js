@@ -1,6 +1,7 @@
 const { spawn } = require('child_process');
 const http = require('http');
 const path = require('path');
+const { assertProcessElevated } = require('../backend-runtime');
 
 const UI_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_RENDERER_PORT = 5173;
@@ -10,6 +11,7 @@ const apiPort = Number(process.env.EII_API_PORT) || DEFAULT_API_PORT;
 const rendererUrl = process.env.EII_RENDERER_URL || `http://127.0.0.1:${rendererPort}`;
 const viteBin = path.join(UI_ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
 const electronCommand = path.join(UI_ROOT, 'node_modules', 'electron', 'dist', process.platform === 'win32' ? 'electron.exe' : 'electron');
+const rendererOnly = process.argv.includes('--renderer-only');
 
 let viteProcess = null;
 let electronProcess = null;
@@ -88,6 +90,7 @@ function shutdown(exitCode = 0) {
 }
 
 async function main() {
+  assertProcessElevated();
   viteProcess = spawnChild('vite', process.execPath, [
     viteBin,
     '--host',
@@ -98,6 +101,10 @@ async function main() {
   ]);
 
   await waitForHttp(rendererUrl);
+
+  if (rendererOnly) {
+    return;
+  }
 
   electronProcess = spawnChild('electron', electronCommand, [
     '--disable-gpu',
@@ -118,6 +125,10 @@ process.on('SIGINT', () => shutdown(130));
 process.on('SIGTERM', () => shutdown(143));
 
 main().catch((error) => {
+  if (error && error.code === 'administrator_required') {
+    console.error('[dev] administrator_required: run this command from an Administrator terminal.');
+    process.exit(5);
+  }
   console.error(error);
   shutdown(1);
 });

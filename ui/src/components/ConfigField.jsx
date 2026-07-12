@@ -1,4 +1,4 @@
-import { FIELD_HINTS } from '../constants/settings.js';
+import { FIELD_HINTS, POSITIVE_BOOLEAN_FIELDS } from '../constants/settings.js';
 import { useI18n } from '../i18n.jsx';
 import { fieldLabel } from '../utils/config.js';
 import { ToggleRow } from './ToggleRow.jsx';
@@ -10,16 +10,23 @@ export function ConfigField({ field, spec, value, error, onChange }) {
   const choiceLabel = (choice) => (
     field === 'anti_cheat_mode' ? t(`antiCheat.${choice}`, choice) : t(`choice.${field}.${choice}`, choice)
   );
+  const fieldClassName = `settings-field field-${field}`;
   if (spec.type === 'bool') {
+    const inverted = POSITIVE_BOOLEAN_FIELDS.has(field);
     return (
-      <div className="settings-field toggle-field">
-        <ToggleRow label={label} detail={hint} checked={value} onChange={onChange} />
+      <div className={`${fieldClassName} toggle-field`}>
+        <ToggleRow
+          label={label}
+          detail={hint}
+          checked={inverted ? !value : value}
+          onChange={(checked) => onChange(inverted ? !checked : checked)}
+        />
       </div>
     );
   }
 
   return (
-    <label className={`settings-field${error ? ' invalid' : ''}`}>
+    <label className={`${fieldClassName}${error ? ' invalid' : ''}`}>
       <span className="settings-field-label">{label}</span>
       {spec.type === 'string_list' ? (
         <textarea

@@ -78,6 +78,7 @@ class NotificationApiTests(unittest.TestCase):
         event = json.loads(data_line.removeprefix("data: "))
         self.assertEqual("game_detected", event["type"])
         self.assertEqual("info", event["severity"])
+        self.assertEqual({"pids": [4242]}, event["data"])
         self.assertTrue(event["suppress_in_game_mode"])
 
     def test_notification_generation_is_quiet_for_initial_snapshot(self):

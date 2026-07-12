@@ -79,11 +79,19 @@ class DummyIfeo(IfeoPowerMixin):
 
 
 class DummyRecoverWithMutex(RecoveryMixin):
-    def __init__(self, ensure_ok=True, persistent_ok=True, jail_ok=True):
+    def __init__(self, ensure_ok=True, persistent_ok=True, jail_ok=True, admin=True):
         self.ensure_ok = ensure_ok
         self.persistent_ok = persistent_ok
         self.jail_ok = jail_ok
+        self.admin = admin
         self.calls = []
+
+    def _check_admin(self):
+        self.calls.append("admin")
+        return self.admin
+
+    def _log(self, message):
+        self.calls.append(("log", message))
 
     def _ensure_single_instance(self):
         self.calls.append("ensure")
@@ -484,7 +492,7 @@ class RecoveryStateTests(unittest.TestCase):
         self.assertTrue(recovery.recover())
 
         self.assertEqual(
-            ["ensure", ("persistent", False), ("jail", False), "release"],
+            ["admin", "ensure", ("persistent", False), ("jail", False), "release"],
             recovery.calls,
         )
 
@@ -493,14 +501,21 @@ class RecoveryStateTests(unittest.TestCase):
 
         self.assertFalse(recovery.recover())
 
-        self.assertEqual(["ensure", ("persistent", False), "release"], recovery.calls)
+        self.assertEqual(["admin", "ensure", ("persistent", False), "release"], recovery.calls)
 
     def test_recover_returns_false_when_jail_recovery_fails(self):
         recovery = DummyRecoverWithMutex(jail_ok=False)
 
         self.assertFalse(recovery.recover())
 
-        self.assertEqual(["ensure", ("persistent", False), ("jail", False), "release"], recovery.calls)
+        self.assertEqual(["admin", "ensure", ("persistent", False), ("jail", False), "release"], recovery.calls)
+
+    def test_recover_requires_administrator_before_mutex_or_recovery(self):
+        recovery = DummyRecoverWithMutex(admin=False)
+
+        self.assertFalse(recovery.recover())
+
+        self.assertEqual(["admin", ("log", "[ERROR] administrator_required")], recovery.calls)
 
     def test_invalid_jail_json_fails_closed_and_preserves_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:

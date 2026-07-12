@@ -1,5 +1,6 @@
 """Public EsportsIsolatorPro class assembled from focused mixins."""
 
+import copy
 import os
 import sys
 from dataclasses import dataclass, field
@@ -116,6 +117,7 @@ class RuntimeState:
     active_mutations: int = 0
     shutting_down: bool = False
     touched: dict = field(default_factory=dict)
+    active_games: dict = field(default_factory=dict)
     ifeo_original: dict = field(default_factory=dict)
     monitor_thread: object = None
     stop_event: object = field(default_factory=threading.Event)
@@ -128,6 +130,8 @@ class RuntimeState:
     timer_resolution_applied: object = None
     capability_notes: list = field(default_factory=list)
     capability_notes_seen: set = field(default_factory=set)
+    capability_issues: list = field(default_factory=list)
+    capability_issues_seen: set = field(default_factory=set)
     reported_failures: dict = field(default_factory=dict)
     topology: object = None
     cpu_partitions: dict = field(default_factory=lambda: {"game": [], "background": [], "housekeeping": [], "game_cores": []})
@@ -136,10 +140,11 @@ class RuntimeState:
     last_hot_thread_refresh: dict = field(default_factory=dict)
     boosted_critical: dict = field(default_factory=dict)
     last_topology_refresh: float = 0.0
-    last_steam_scan: float = 0.0
-    last_epic_scan: float = 0.0
+    last_steam_scan: float = float("-inf")
+    last_epic_scan: float = float("-inf")
     steam_games_cache: set = field(default_factory=set)
     epic_games_cache: set = field(default_factory=set)
+    discovery_issues: list = field(default_factory=list)
     known_non_games: set = field(default_factory=set)
     path_classification_cache: dict = field(default_factory=dict)
     process_create_times: dict = field(default_factory=dict)
@@ -297,6 +302,7 @@ class EsportsIsolatorPro(
         self._active_mutations = state.active_mutations
         self._shutting_down = state.shutting_down
         self._touched = state.touched
+        self._active_games = state.active_games
         self._ifeo_original = state.ifeo_original
         self._monitor_thread = state.monitor_thread
         self._stop_event = state.stop_event
@@ -314,6 +320,8 @@ class EsportsIsolatorPro(
         self._timer_resolution_applied = state.timer_resolution_applied
         self._capability_notes = state.capability_notes
         self._capability_notes_seen = state.capability_notes_seen
+        self._capability_issues = state.capability_issues
+        self._capability_issues_seen = state.capability_issues_seen
         self._reported_failures = state.reported_failures
         self._reported_failure_ttl_s = 3600.0
         self._reported_failure_limit = 5000
@@ -338,6 +346,7 @@ class EsportsIsolatorPro(
         self._last_epic_scan = state.last_epic_scan
         self._steam_games_cache = state.steam_games_cache
         self._epic_games_cache = state.epic_games_cache
+        self._discovery_issues = state.discovery_issues
         self._known_non_games = state.known_non_games
         self._path_classification_cache = state.path_classification_cache
         self._process_create_times = state.process_create_times
@@ -370,9 +379,9 @@ class EsportsIsolatorPro(
         self._spi_struct_ptr = scratch.spi_struct_ptr
         self._register_capability_defaults()
         if scan_game_libraries and self.auto_detect_steam:
-            self._scan_steam_games()
+            self._scan_steam_games(force=True)
         if scan_game_libraries and self.auto_detect_epic:
-            self._scan_epic_games()
+            self._scan_epic_games(force=True)
 
     def get_runtime_status(self):
         """Return a small read-only runtime snapshot for localhost UI bridges."""
@@ -386,6 +395,9 @@ class EsportsIsolatorPro(
             shutting_down = bool(self._shutting_down)
             shutdown_done = bool(self._shutdown_done)
             reported_failure_count = len(self._reported_failures)
+            active_games = [dict(game) for game in self._active_games.values()]
+            discovery_issues = [dict(issue) for issue in self._discovery_issues]
+            capability_issues = copy.deepcopy(self._capability_issues)
             # WHY (item 11): Snapshot the partition/topology references under
             # the same lock that guards the rebind in _build_topology_map /
             # _select_cpu_partitions, so we never read a reference that is being
@@ -393,7 +405,6 @@ class EsportsIsolatorPro(
             cpu_partitions = self._cpu_partitions
             topology_available = bool(self._topology)
 
-        active_game_pids = []
         jailed_count = 0
         foreground_count = 0
         optimized_game_count = 0
@@ -405,13 +416,9 @@ class EsportsIsolatorPro(
             elif source == "optimize_game":
                 optimized_game_count += 1
 
-            normalized_name = self._normalize_name(name)
-            if source == "optimize_game" or (
-                source == "foreground" and self._is_game_name_normalized(normalized_name)
-            ):
-                active_game_pids.append(pid)
-
-        game_mode = bool(active_game_pids)
+        active_games.sort(key=lambda game: (str(game.get("name", "")), int(game.get("pid", 0))))
+        active_game_pids = sorted(int(game["pid"]) for game in active_games)
+        game_mode = bool(active_games)
         partition_counts = {
             key: len(value) if isinstance(value, list) else 0
             for key, value in cpu_partitions.items()
@@ -419,16 +426,19 @@ class EsportsIsolatorPro(
         }
         partition_counts["game_cores"] = len(cpu_partitions.get("game_cores", []))
 
+        running = bool(
+            monitor_thread
+            and monitor_thread.is_alive()
+            and not self._stop_event.is_set()
+            and not shutdown_done
+        )
         return {
-            "running": bool(
-                monitor_thread
-                and monitor_thread.is_alive()
-                and not self._stop_event.is_set()
-                and not shutdown_done
-            ),
+            "running": running,
+            "monitoring_active": running,
             "game_mode": game_mode,
-            "active_game_pids": sorted(active_game_pids),
-            "active_game_count": len(active_game_pids),
+            "active_games": active_games,
+            "active_game_pids": active_game_pids,
+            "active_game_count": len(active_games),
             "tracked_process_count": len(touched_entries),
             "jailed_process_count": jailed_count,
             "foreground_tracked_count": foreground_count,
@@ -445,6 +455,8 @@ class EsportsIsolatorPro(
             "persistent_recovery_incomplete": bool(self._persistent_recovery_incomplete),
             "reported_failure_count": reported_failure_count,
             "capability_notes": list(self._capability_notes),
+            "capability_issues": capability_issues,
+            "discovery_issues": discovery_issues,
             "cpu_partitions": partition_counts,
             "topology_available": topology_available,
             "api": {
@@ -456,6 +468,10 @@ class EsportsIsolatorPro(
     def get_live_snapshot(self):
         """Return live UI data without starting a parallel process poll."""
         status = self.get_runtime_status()
+        active_games = {
+            int(game["pid"]): dict(game)
+            for game in status.get("active_games", [])
+        }
         with self._state_lock:
             entries = [
                 {
@@ -474,12 +490,33 @@ class EsportsIsolatorPro(
                 }
                 for pid, entry in self._touched.items()
             ]
+            process_create_times = dict(self._process_create_times)
+
+        tracked_pids = {entry["pid"] for entry in entries}
+        for pid, game in active_games.items():
+            if pid in tracked_pids:
+                continue
+            entries.append({
+                "pid": pid,
+                "name": game.get("name", ""),
+                "source": "observed_game",
+                "gen": 0,
+                "create_time": int(process_create_times.get(pid, 0) or 0),
+                "thread_count": 0,
+                "priority_class": None,
+                "cpu_set_ids": [],
+                "affinity_mask": None,
+                "io_priority": None,
+                "page_priority": None,
+                "priority_boost_disabled": None,
+            })
 
         active_game_pids = set(status.get("active_game_pids", []))
         processes = []
         for entry in entries:
             name = self._normalize_name(entry["name"])
             source = entry["source"]
+            tuning_state = active_games.get(entry["pid"], {}).get("tuning_state")
             protected = bool(
                 name in self.protected_exact
                 or (name and name.startswith(self.protected_prefixes))
@@ -504,6 +541,7 @@ class EsportsIsolatorPro(
                 "status": marker,
                 "game": game,
                 "protected": protected,
+                "tuning_state": tuning_state,
             })
 
         processes.sort(key=lambda process: (process["status"] != "game", process["name"], process["pid"]))

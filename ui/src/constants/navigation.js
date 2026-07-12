@@ -7,8 +7,8 @@ export const PAGES = [
   {
     id: 'dashboard',
     labelKey: 'nav.dashboard',
-    label: 'Dashboard',
-    title: 'Dashboard',
+    label: 'Overview',
+    title: 'Overview',
     renderIcon: DashboardIcon
   },
   {
@@ -21,22 +21,22 @@ export const PAGES = [
   {
     id: 'topology',
     labelKey: 'nav.topology',
-    label: 'Topology',
-    title: 'CPU Topology',
+    label: 'CPU Map',
+    title: 'CPU Map',
     renderIcon: ChipIcon
   },
   {
     id: 'logs',
     labelKey: 'nav.logs',
-    label: 'Logs',
-    title: 'Logs',
+    label: 'Activity',
+    title: 'Activity',
     renderIcon: DocumentIcon
   },
   {
     id: 'advanced',
     labelKey: 'nav.advanced',
-    label: 'Advanced Tools',
-    title: 'Advanced Tools',
+    label: 'Advanced',
+    title: 'Advanced',
     renderIcon: SettingsIcon
   }
 ];

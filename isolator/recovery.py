@@ -199,6 +199,9 @@ class RecoveryMixin:
         return ok
 
     def recover(self):
+        if not self._check_admin():
+            self._log("[ERROR] administrator_required")
+            return False
         if not self._ensure_single_instance():
             return False
         try:

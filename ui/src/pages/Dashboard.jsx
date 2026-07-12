@@ -1,41 +1,36 @@
 import { useState } from 'react';
+import { Tag } from '@carbon/react';
 import PlayIcon from '@carbon/icons-react/es/PlayFilledAlt.js';
 import StopIcon from '@carbon/icons-react/es/StopFilledAlt.js';
 import RestoreIcon from '@carbon/icons-react/es/Renew.js';
-import { ActionPanel } from '../components/cards/ActionPanel.jsx';
 import { KpiCell } from '../components/KpiCell.jsx';
-import { SectionGrid } from '../components/layout/SectionGrid.jsx';
 import { PageHeading } from '../components/PageHeading.jsx';
 import { ProcessTable } from '../components/ProcessTable.jsx';
 import { ReadinessChecklist } from '../components/ReadinessChecklist.jsx';
 import { StatusTag } from '../components/StatusTag.jsx';
 import { SystemAnalysis } from '../components/SystemAnalysis.jsx';
-import { StatusPill } from '../components/status/StatusPill.jsx';
-import { EmptyState } from '../components/states/EmptyState.jsx';
-import { ErrorState } from '../components/states/ErrorState.jsx';
 import { formatPartitions, formatTimerResolution } from '../utils/format.js';
 import { postLifecycleAction } from '../utils/lifecycle.js';
 import { useI18n } from '../i18n.jsx';
 
 function formatProcessMode(mode, t) {
-  return mode ? t(`process.mode.${mode}`, mode) : t('dashboard.waitingSnapshot', 'waiting for live snapshot');
+  return mode ? t(`process.mode.${mode}`, mode) : t('dashboard.waitingSnapshot', 'Waiting for activity');
 }
 
 function formatAntiCheatMode(mode, t) {
   return mode ? t(`antiCheat.${mode}`, mode) : t('common.na', 'N/A');
 }
 
-function connectionTone(connectionState) {
-  if (connectionState === 'connected') {
-    return 'connected';
+function capabilityIssueText(issue, t) {
+  if (typeof issue === 'string') {
+    return t(`capability.${issue}`, issue);
   }
-  if (connectionState === 'error') {
-    return 'danger';
-  }
-  if (connectionState === 'paused') {
-    return 'warning';
-  }
-  return 'inactive';
+  const code = issue?.code || issue?.key || 'unknown';
+  return t(
+    issue?.message_key || `capability.${code}`,
+    issue?.message || issue?.detail || code,
+    issue?.data || {}
+  );
 }
 
 export function DashboardPage({ live }) {
@@ -44,39 +39,129 @@ export function DashboardPage({ live }) {
   const snapshot = live.snapshot;
   const status = snapshot?.status || {};
   const processCount = snapshot?.process_count ?? status.tracked_process_count ?? 0;
+  const hasSnapshot = Boolean(snapshot);
   const activeGamePids = Array.isArray(status.active_game_pids) ? status.active_game_pids : [];
-  const capabilityNotes = Array.isArray(status.capability_notes) ? status.capability_notes : [];
-  const isRunning = Boolean(status.running);
+  const activeGames = Array.isArray(status.active_games) ? status.active_games : [];
+  const capabilityIssues = Array.isArray(status.capability_issues) ? status.capability_issues : [];
+  const actionableCapabilityIssues = capabilityIssues.filter((issue) => (
+    typeof issue === 'string' || !issue?.severity || issue.severity === 'warning' || issue.severity === 'error'
+  ));
+  const capabilityMessages = capabilityIssues.length
+    ? actionableCapabilityIssues.map((issue) => capabilityIssueText(issue, t))
+    : (Array.isArray(status.capability_notes) ? status.capability_notes : []);
+  const isRunning = status.monitoring_active === undefined
+    ? Boolean(status.running)
+    : Boolean(status.monitoring_active);
   const gameMode = Boolean(status.game_mode);
-  const partitions = formatPartitions(status.cpu_partitions);
-  const modeValue = gameMode
-    ? t('status.gameMode', 'Game mode')
-    : isRunning
-      ? t('status.engineRunning', 'Engine running')
-      : t('status.engineIdle', 'Engine idle');
+  const activeProcess = Array.isArray(snapshot?.processes)
+    ? snapshot.processes.find((process) => process.game || process.status === 'game')
+    : null;
+  const activeGame = activeGames[0] || activeProcess;
+  const gameDetected = Boolean(activeGame) || gameMode;
+  const reportedFailureCount = Number(status.reported_failure_count || 0);
+  const recoveryClean = hasSnapshot && !status.persistent_recovery_incomplete && reportedFailureCount === 0;
+  const needsAttention = !status.admin || !recoveryClean || capabilityMessages.length > 0;
+  const restored = actionState.lastAction === 'recover' && !actionState.error && !isRunning;
+  const partitions = formatPartitions(status.cpu_partitions, {
+    game: t('process.filter.game', 'Game'),
+    background: t('process.filter.jailed', 'Background'),
+    system: t('dashboard.systemProcesses', 'System')
+  });
   const timerValue = status.timer_resolution_applied
     ? formatTimerResolution(status.timer_resolution_applied)
     : t('dashboard.notApplied', 'Not applied');
-  const antiCheatMode = status.anti_cheat_mode ? formatAntiCheatMode(status.anti_cheat_mode, t) : (isRunning ? t('common.na', 'N/A') : t('dashboard.engineStopped', 'Engine stopped'));
-  const hasActiveGame = activeGamePids.length > 0;
-  const backendUnavailable = live.connectionState === 'error';
-  const heroDetail = gameMode && hasActiveGame
-    ? `${t('dashboard.activePids', 'Active PIDs')} ${activeGamePids.join(', ')}`
-    : isRunning
-      ? t('dashboard.waitingForGame', 'Engine is running and waiting for a supported game.')
-      : t('dashboard.startPrompt', 'Start the engine when you are ready to monitor and isolate a game session.');
-  const primaryAction = isRunning ? 'stop' : 'start';
-  const primaryActionLabel = isRunning ? t('common.stop', 'Stop') : t('common.start', 'Start');
-  const primaryActionIcon = isRunning ? <StopIcon size={16} /> : <PlayIcon size={16} />;
-  const primaryActionDisabled = Boolean(actionState.pending) || (primaryAction === 'start' && isRunning) || (primaryAction === 'stop' && !isRunning);
-  const actionReason = actionState.pending
-    ? t('dashboard.actionPending', 'Waiting for the current lifecycle action to finish.')
-    : isRunning
-      ? t('dashboard.stopReason', 'Stop returns the engine to idle after the current session.')
-      : t('dashboard.startReason', 'Start enables monitoring, readiness checks, and game detection.');
-  const restoreDisabledReason = isRunning
-    ? t('dashboard.restoreDisabledRunning', 'Restore is available after the engine is stopped.')
-    : t('dashboard.restoreReason', 'Restore re-applies safety cleanup if a previous run ended unexpectedly.');
+  const antiCheatMode = status.anti_cheat_mode ? formatAntiCheatMode(status.anti_cheat_mode, t) : (isRunning ? t('common.na', 'N/A') : t('dashboard.monitoringPaused', 'Monitoring paused'));
+  const profileName = status.anti_cheat_mode
+    ? t('dashboard.profileName', '{{mode}} protection').replace('{{mode}}', antiCheatMode)
+    : t('dashboard.profilePending', 'Protection profile');
+  const activeGameName = activeGame?.name || t('dashboard.noGame', 'No game detected');
+  const activeGameTuningState = activeGame?.tuning_state || (gameMode ? 'applied' : 'pending');
+  const statusConfig = status.config && typeof status.config === 'object' ? status.config : null;
+  const powerPlanDisabled = statusConfig?.disable_power_scheme_switch === true;
+  const timerTuningDisabled = statusConfig?.disable_timer_resolution_tweak === true;
+  const dashboardState = !hasSnapshot
+    ? 'connecting'
+    : actionState.pending
+      ? 'working'
+      : restored
+        ? 'restored'
+        : gameDetected
+          ? 'active'
+          : isRunning
+            ? 'detecting'
+            : needsAttention
+              ? 'attention'
+              : 'ready';
+  const dashboardStateLabel = dashboardState === 'active'
+    ? activeGameTuningState === 'applied'
+      ? t('dashboard.optimizingGame', 'Optimizing {{game}}', { game: activeGameName })
+      : t('dashboard.gameDetected', 'Game detected')
+    : dashboardState === 'connecting'
+      ? t(`connection.${live.connectionState}`, live.connectionState)
+      : dashboardState === 'detecting'
+        ? t('dashboard.detecting', 'Monitoring for games')
+        : dashboardState === 'restored'
+          ? t('dashboard.restored', 'Restored')
+          : dashboardState === 'ready'
+            ? t('dashboard.ready', 'Ready')
+            : dashboardState === 'working'
+              ? t('dashboard.working', 'Applying changes')
+              : t('dashboard.attention', 'Action required');
+  const dashboardStateDetail = dashboardState === 'active'
+      ? t(`dashboard.tuningState.${activeGameTuningState}`, activeGameName, { game: activeGameName })
+    : dashboardState === 'connecting'
+      ? t('dashboard.connectingDetail', 'Connecting to local monitoring')
+      : dashboardState === 'detecting'
+        ? t('dashboard.detectingDetail', 'UltraIsolator is watching for your configured games')
+        : dashboardState === 'restored'
+          ? t('dashboard.restoredDetail', 'Original system settings were restored')
+          : dashboardState === 'ready'
+            ? t('dashboard.readyDetail', 'Your configuration is ready')
+            : dashboardState === 'working'
+              ? t('dashboard.workingDetail', 'Waiting for local confirmation')
+              : capabilityMessages[0] || (!status.admin
+                ? t('dashboard.adminRequired', 'Administrator access is required for full tuning')
+                : t('dashboard.recoveryReview', 'Review recovery status before starting'));
+  const plannedChanges = [
+    {
+      id: 'background-isolation',
+      label: t('dashboard.backgroundIsolation', 'Background control'),
+      value: status.background_jailing
+        ? t('common.enabled', 'Enabled')
+        : t('common.disabled', 'Disabled'),
+      state: status.background_jailing ? 'enabled' : 'disabled'
+    },
+    {
+      id: 'anti-cheat-policy',
+      label: t('dashboard.antiCheat', 'Anti-cheat'),
+      value: antiCheatMode,
+      state: 'configured'
+    },
+    {
+      id: 'power-plan',
+      label: t('dashboard.powerPlan', 'Power Plan'),
+      value: status.power_plan_active
+        ? t('dashboard.active', 'Active')
+        : statusConfig
+          ? powerPlanDisabled
+            ? t('common.disabled', 'Disabled')
+            : t('dashboard.onGameDetection', 'On game detection')
+          : t('dashboard.automatic', 'Automatic'),
+      state: status.power_plan_active ? 'active' : powerPlanDisabled ? 'disabled' : statusConfig ? 'planned' : 'configured'
+    },
+    {
+      id: 'timer-tuning',
+      label: t('dashboard.timer', 'Timer'),
+      value: status.timer_resolution_applied
+        ? timerValue
+        : statusConfig
+          ? timerTuningDisabled
+            ? t('common.disabled', 'Disabled')
+            : t('dashboard.onGameDetection', 'On game detection')
+          : t('dashboard.automatic', 'Automatic'),
+      state: status.timer_resolution_applied ? 'active' : timerTuningDisabled ? 'disabled' : statusConfig ? 'planned' : 'configured'
+    }
+  ];
 
   const runAction = async (action) => {
     setActionState({ pending: action, error: null, lastAction: null });
@@ -96,159 +181,132 @@ export function DashboardPage({ live }) {
     <section className="page dashboard-page" aria-labelledby="dashboard-title">
       <PageHeading title="Dashboard" titleKey="nav.dashboard" titleId="dashboard-title">
         <StatusTag status={status} />
-        <StatusPill tone={connectionTone(live.connectionState)} showDot>
+        <Tag type={live.connectionState === 'connected' ? 'green' : 'gray'}>
           {t(`connection.${live.connectionState}`, live.connectionState)}
-        </StatusPill>
+        </Tag>
       </PageHeading>
 
-      <div className={`dashboard-command-center dashboard-hero${gameMode ? ' game-mode' : ''}`} aria-label="Dashboard command center">
-        <div className="dashboard-hero-main">
-          <div className="dashboard-hero-kicker">{t('dashboard.currentState', 'Current state')}</div>
-          <h2>{modeValue}</h2>
-          <p>{heroDetail}</p>
-          <div className="dashboard-hero-pills" aria-label="Dashboard state indicators">
-            <StatusPill tone={connectionTone(live.connectionState)} showDot>
-              {t(`connection.${live.connectionState}`, live.connectionState)}
-            </StatusPill>
-            <StatusPill tone={status.admin ? 'success' : 'warning'}>
-              {status.admin ? t('dashboard.adminReady', 'Admin ready') : t('dashboard.adminLimited', 'Admin limited')}
-            </StatusPill>
-            <StatusPill tone={gameMode ? 'success' : isRunning ? 'warning' : 'inactive'}>
-              {gameMode ? t('status.gameMode', 'Game mode') : (isRunning ? t('status.engineRunning', 'Engine running') : t('status.engineIdle', 'Engine idle'))}
-            </StatusPill>
-            <StatusPill tone={status.anti_cheat_mode ? 'warning' : 'inactive'}>
-              {antiCheatMode}
-            </StatusPill>
+      <div className={`dashboard-profile-hero dashboard-status-panel dashboard-state-${dashboardState}${gameMode ? ' game-mode' : ''}`}>
+        <div className="dashboard-profile-main mode-readout">
+          <div className="dashboard-profile-eyebrow kpi-label">{t('dashboard.sessionProfile', 'Session profile')}</div>
+          <div className="dashboard-profile-name mode-value">{profileName}</div>
+          <div className="dashboard-profile-game">
+            <span>{t('dashboard.activeGame', 'Active game')}</span>
+            <strong>{activeGameName}</strong>
+          </div>
+          <div className="dashboard-profile-detail mode-detail">
+            {activeGamePids.length ? `${t('dashboard.activePids', 'Active PIDs')} ${activeGamePids.join(', ')}` : t('dashboard.waitingForGame', 'Waiting for a configured game')}
+          </div>
+          <div className={`dashboard-profile-state is-${dashboardState}`} role="status" aria-live="polite">
+            <span className="dashboard-profile-state-indicator" aria-hidden="true" />
+            <span>
+              <strong>{dashboardStateLabel}</strong>
+              <small>{dashboardStateDetail}</small>
+            </span>
           </div>
         </div>
 
-        <ActionPanel
-          className="dashboard-action-panel"
-          title={isRunning ? t('dashboard.sessionControls', 'Session controls') : t('dashboard.readyToStart', 'Ready to start')}
-          detail={actionReason}
-          actions={(
-            <div className="dashboard-action-stack">
-              <div className="dashboard-action-buttons quick-actions" aria-label="Quick actions">
-                <button type="button" className="dashboard-primary-action" onClick={() => runAction(primaryAction)} disabled={primaryActionDisabled}>
-                  {primaryActionIcon}
-                  {primaryActionLabel}
-                </button>
-                {primaryAction !== 'start' ? (
-                  <button type="button" onClick={() => runAction('start')} disabled={Boolean(actionState.pending) || isRunning}>
-                    <PlayIcon size={16} />
-                    {t('common.start', 'Start')}
-                  </button>
-                ) : null}
-                {primaryAction !== 'stop' ? (
-                  <button type="button" onClick={() => runAction('stop')} disabled={Boolean(actionState.pending) || !isRunning}>
-                    <StopIcon size={16} />
-                    {t('common.stop', 'Stop')}
-                  </button>
-                ) : null}
-                <button type="button" onClick={() => runAction('recover')} disabled={Boolean(actionState.pending) || isRunning}>
-                  <RestoreIcon size={16} />
-                  {t('common.restore', 'Restore')}
-                </button>
-              </div>
-              <div className="dashboard-action-reason">{restoreDisabledReason}</div>
+        <section className="planned-change-summary capability-grid" aria-label={t('dashboard.sessionPlan', 'Session plan')}>
+          {plannedChanges.map((change) => (
+            <div className={`planned-change-item is-${change.state}`} key={change.id}>
+              <span>{change.label}</span>
+              <strong>{change.value}</strong>
             </div>
-          )}
-        />
+          ))}
+        </section>
+
+        <div className="dashboard-profile-actions quick-actions" aria-label={t('dashboard.quickActions', 'Quick actions')}>
+          <button className="dashboard-primary-action" type="button" onClick={() => runAction('start')} disabled={Boolean(actionState.pending) || isRunning}>
+            <PlayIcon size={16} />
+            {t('dashboard.resumeMonitoring', 'Resume monitoring')}
+          </button>
+          <button className="dashboard-secondary-action" type="button" onClick={() => runAction('stop')} disabled={Boolean(actionState.pending) || !isRunning}>
+            <StopIcon size={16} />
+            {t('dashboard.pauseMonitoring', 'Pause monitoring')}
+          </button>
+          <button className="dashboard-recovery-action" type="button" onClick={() => runAction('recover')} disabled={Boolean(actionState.pending) || isRunning}>
+            <RestoreIcon size={16} />
+            {t('dashboard.restoreWindows', 'Restore Windows settings')}
+          </button>
+        </div>
       </div>
-
-      {backendUnavailable ? (
-        <ErrorState
-          className="dashboard-backend-error"
-          title={t('dashboard.backendUnavailable', 'Backend unavailable')}
-          detail={live.error || t('dashboard.backendUnavailableDetail', 'Live telemetry is not connected. The dashboard will update when Electron main reconnects.')}
-        />
-      ) : null}
-
-      {!hasActiveGame ? (
-        <EmptyState
-          className="dashboard-empty-state"
-          title={t('dashboard.noGame', 'No active game detected')}
-          detail={isRunning ? t('dashboard.noGameRunningDetail', 'Keep the engine running and launch a configured game to activate optimization.') : t('dashboard.noGameIdleDetail', 'Start the engine before launching a supported game to monitor readiness and safety state.')}
-        />
-      ) : null}
 
       {actionState.error ? <div className="action-error">{actionState.error}</div> : null}
 
-      <div className="dashboard-metric-groups" aria-label="Dashboard grouped metrics">
-        <section className="dashboard-metric-group" aria-labelledby="dashboard-session-state">
-          <h2 id="dashboard-session-state">{t('dashboard.sessionState', 'Session state')}</h2>
-          <SectionGrid className="dashboard-kpi-grid" ariaLabel="Session state metrics">
-            <KpiCell
-              label={t('dashboard.trackedProcesses', 'Tracked Processes')}
-              value={processCount}
-              detail={formatProcessMode(snapshot?.process_mode, t)}
-              highlight
-            />
-            <KpiCell
-              label={t('dashboard.jailedBackground', 'Jailed Background')}
-              value={status.jailed_process_count ?? 0}
-              detail={status.background_jailing ? t('dashboard.backgroundJailingEnabled', 'background jailing enabled') : t('dashboard.backgroundJailingDisabled', 'background jailing disabled')}
-            />
-          </SectionGrid>
-        </section>
-
-        <section className="dashboard-metric-group" aria-labelledby="dashboard-system-readiness">
-          <h2 id="dashboard-system-readiness">{t('dashboard.systemReadiness', 'System readiness')}</h2>
-          <SectionGrid className="dashboard-kpi-grid" ariaLabel="System readiness metrics">
-            <KpiCell
-              label={t('dashboard.powerPlan', 'Power Plan')}
-              value={status.power_plan_active ? t('dashboard.active', 'ACTIVE') : t('dashboard.idle', 'IDLE')}
-              detail={status.power_scheme_in_use || t('dashboard.engineStopped', 'Engine stopped')}
-              tone={status.power_plan_active ? 'positive' : 'default'}
-            />
-            <KpiCell
-              label={t('dashboard.timer', 'Timer')}
-              value={timerValue}
-              detail={t('dashboard.timerDetail', 'system timer resolution')}
-              tone={status.timer_resolution_applied ? 'positive' : 'default'}
-            />
-          </SectionGrid>
-        </section>
-
-        <section className="dashboard-metric-group" aria-labelledby="dashboard-optimization-impact">
-          <h2 id="dashboard-optimization-impact">{t('dashboard.optimizationImpact', 'Optimization impact')}</h2>
-          <SectionGrid className="dashboard-kpi-grid" ariaLabel="Optimization impact metrics">
-            <KpiCell
-              label={t('dashboard.cpuPartitions', 'CPU Partitions')}
-              value={partitions}
-              detail={status.topology_available ? t('dashboard.topologyAvailable', 'topology map available') : t('dashboard.topologyStart', 'Start engine to populate topology')}
-            />
-          </SectionGrid>
-        </section>
-
-        <section className="dashboard-metric-group" aria-labelledby="dashboard-recovery-safety">
-          <h2 id="dashboard-recovery-safety">{t('dashboard.recoverySafety', 'Recovery/safety')}</h2>
-          <SectionGrid className="dashboard-kpi-grid" ariaLabel="Recovery and safety metrics">
-            <KpiCell
-              label={t('dashboard.capabilityNotes', 'Capability Notes')}
-              value={capabilityNotes.length ? capabilityNotes.length : 'OK'}
-              detail={capabilityNotes[0] || t('dashboard.fullFeatures', 'Full feature set is available')}
-              tone={capabilityNotes.length ? 'warning' : 'positive'}
-            />
-          </SectionGrid>
-        </section>
+      <div className="dashboard-trust-strip" aria-label={t('dashboard.trustStatus', 'Safety and trust status')}>
+        <div className={`dashboard-trust-item ${!hasSnapshot ? 'is-pending' : status.admin ? 'is-ready' : 'needs-attention'}`}>
+          <span>{t('dashboard.admin', 'Admin')}</span>
+          <strong>{!hasSnapshot ? t('common.na', 'N/A') : status.admin ? t('dashboard.yes', 'Yes') : t('dashboard.no', 'No')}</strong>
+          <small>{hasSnapshot
+            ? t('dashboard.adminTrustDetail', 'Required for protected Windows tuning')
+            : t('dashboard.statusPending', 'Waiting for local status')}</small>
+        </div>
+        <div className={`dashboard-trust-item ${!hasSnapshot ? 'is-pending' : recoveryClean ? 'is-ready' : 'needs-attention'}`}>
+          <span>{t('dashboard.recovery', 'Safe restore')}</span>
+          <strong>{!hasSnapshot ? t('common.na', 'N/A') : recoveryClean ? t('checkStatus.ok', 'Ready') : t('checkStatus.warning', 'Review')}</strong>
+          <small>{!hasSnapshot
+            ? t('dashboard.statusPending', 'Waiting for local status')
+            : recoveryClean
+              ? t('dashboard.recoveryCleanDetail', 'Windows settings can be restored safely')
+              : reportedFailureCount
+                ? t('dashboard.recoveryAttentionDetail', '{{count}} recovery issues need review').replace('{{count}}', reportedFailureCount)
+                : t('dashboard.recoveryReview', 'Review recovery status before starting')}</small>
+        </div>
+        <div className="dashboard-trust-item is-ready">
+          <span>{t('dashboard.protectedProcesses', 'Protected processes')}</span>
+          <strong>{t('process.status.protected', 'Protected')}</strong>
+          <small>{t('dashboard.protectedProcessesDetail', 'Steam, FACEIT, anti-cheat, and system processes stay guarded')}</small>
+        </div>
+        <div className="dashboard-trust-item is-ready">
+          <span>{t('dashboard.localControl', 'Local control')}</span>
+          <strong>{t('dashboard.onDevice', 'On-device')}</strong>
+          <small>{t('dashboard.localControlDetail', 'Lifecycle actions stay on this PC')}</small>
+        </div>
       </div>
 
-      <div className="dashboard-insights dashboard-secondary-grid">
-        <section className="dashboard-optimization-section" aria-labelledby="dashboard-analysis-title">
-          <h2 id="dashboard-analysis-title" className="dashboard-section-heading">{t('dashboard.optimizationAnalysis', 'Optimization analysis')}</h2>
-          <SystemAnalysis live={live} />
-        </section>
-        <section className="dashboard-readiness-section" aria-labelledby="dashboard-readiness-title">
-          <h2 id="dashboard-readiness-title" className="dashboard-section-heading">{t('dashboard.readinessWarnings', 'Readiness warnings and errors')}</h2>
-          <ReadinessChecklist live={live} />
-        </section>
+      <div className="kpi-strip dashboard-kpi-grid" aria-label="Dashboard KPI status">
+        <KpiCell
+          label={t('dashboard.trackedProcesses', 'Apps observed')}
+          value={processCount}
+          detail={formatProcessMode(snapshot?.process_mode, t)}
+          highlight
+        />
+        <KpiCell
+          label={t('dashboard.jailedBackground', 'Background limited')}
+          value={status.jailed_process_count ?? 0}
+          detail={status.background_jailing ? t('dashboard.backgroundJailingEnabled', 'Background control is ready') : t('dashboard.backgroundJailingDisabled', 'Background control is off')}
+        />
+        <KpiCell
+          label={t('dashboard.powerPlan', 'Power Plan')}
+          value={status.power_plan_active ? t('dashboard.active', 'ACTIVE') : t('dashboard.idle', 'IDLE')}
+          detail={status.power_scheme_in_use || t('dashboard.waitingForGame', 'Waiting for a configured game')}
+          tone={status.power_plan_active ? 'positive' : 'default'}
+        />
+        <KpiCell
+          label={t('dashboard.timer', 'Timer')}
+          value={timerValue}
+          detail={t('dashboard.timerDetail', 'system timer resolution')}
+          tone={status.timer_resolution_applied ? 'positive' : 'default'}
+        />
+        <KpiCell
+          label={t('dashboard.cpuPartitions', 'CPU Partitions')}
+          value={partitions}
+          detail={status.topology_available ? t('dashboard.topologyAvailable', 'CPU map available') : t('dashboard.topologyStart', 'CPU allocation appears when monitoring is active')}
+        />
+        <KpiCell
+          label={t('dashboard.compatibility', 'Compatibility')}
+          value={capabilityMessages.length ? capabilityMessages.length : t('checkStatus.ok', 'Ready')}
+          detail={capabilityMessages[0] || t('dashboard.fullFeatures', 'All features are available')}
+          tone={capabilityMessages.length ? 'warning' : 'positive'}
+        />
       </div>
 
-      <section className="dashboard-diagnostics-section" aria-labelledby="dashboard-processes-title">
-        <h2 id="dashboard-processes-title" className="dashboard-section-heading">{t('dashboard.recentActivity', 'Recent activity and diagnostics')}</h2>
-        <ProcessTable snapshot={snapshot} />
-      </section>
+      <div className="dashboard-insights">
+        <SystemAnalysis live={live} />
+        <ReadinessChecklist live={live} />
+      </div>
+
+      <ProcessTable snapshot={snapshot} />
     </section>
   );
 }

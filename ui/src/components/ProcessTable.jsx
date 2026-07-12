@@ -10,7 +10,10 @@ function processMatchesFilter(process, filter) {
     return true;
   }
   if (filter === 'game') {
-    return Boolean(process.game) || process.status === 'game';
+    return Boolean(process.game)
+      || process.status === 'game'
+      || process.source === 'observed_game'
+      || Boolean(process.tuning_state);
   }
   if (filter === 'protected') {
     return Boolean(process.protected) || process.status === 'protected';
@@ -42,7 +45,31 @@ function formatCpuSetsLabel(process, t) {
 }
 
 function formatProcessMode(mode, t) {
-  return mode ? t(`process.mode.${mode}`, mode) : t('process.modeWaiting', 'waiting for live snapshot');
+  return mode ? t(`process.mode.${mode}`, mode) : t('process.modeWaiting', 'Waiting for optimization activity');
+}
+
+function processReason(process, t) {
+  const status = process.status || (process.game ? 'game' : 'tracked');
+  if (process.tuning_state) {
+    return t(
+      `process.reason.game.${process.tuning_state}`,
+      t('process.reason.game', 'The game is detected and prepared for stable frame delivery'),
+      { game: process.name || t('process.nameFallback', 'game') }
+    );
+  }
+  const key = status === 'jailed'
+    ? 'limited'
+    : status === 'foreground'
+      ? 'foreground'
+      : status;
+  return t(`process.reason.${key}`, process.source || t('process.reason.tracked', 'Observed while monitoring your game session'));
+}
+
+function processActionStatus(process) {
+  if (process.game || process.status === 'game' || process.source === 'observed_game' || process.tuning_state) {
+    return 'game';
+  }
+  return process.status || 'tracked';
 }
 
 export function ProcessTable({ snapshot }) {
@@ -70,7 +97,7 @@ export function ProcessTable({ snapshot }) {
     <Tile className="module-surface process-module">
       <div className="process-module-header">
         <div>
-          <div className="module-title" id="process-table-title">{t('process.title', 'Process List')}</div>
+          <div className="module-title" id="process-table-title">{t('process.title', 'Optimization activity')}</div>
           <div className="process-mode-note">
             {formatProcessMode(snapshot?.process_mode, t)}
           </div>
@@ -80,8 +107,8 @@ export function ProcessTable({ snapshot }) {
         </div>
       </div>
 
-      <div className="process-filter-bar" aria-label="Process filters">
-        <div className="process-filter-group" role="group" aria-label="Status filter">
+      <div className="process-filter-bar" aria-label={t('process.filters', 'Activity filters')}>
+        <div className="process-filter-group" role="group" aria-label={t('process.statusFilter', 'Action filter')}>
           {PROCESS_FILTERS.map((filter) => (
             <button
               key={filter.id}
@@ -95,10 +122,10 @@ export function ProcessTable({ snapshot }) {
           ))}
         </div>
         <input
-          aria-label="Search processes"
+          aria-label={t('process.searchLabel', 'Search optimization activity')}
           className="process-search"
           type="search"
-          placeholder={t('process.search', 'Search PID, name, source')}
+          placeholder={t('process.search', 'Search PID or application')}
           value={processQuery}
           onChange={(event) => setProcessQuery(event.target.value)}
         />
@@ -108,35 +135,31 @@ export function ProcessTable({ snapshot }) {
         <table className="process-table" aria-labelledby="process-table-title">
           <thead>
             <tr>
-              <th scope="col">{t('process.column.status', 'Status')}</th>
+              <th scope="col">{t('process.column.action', 'Action')}</th>
+              <th scope="col">{t('process.column.name', 'Application')}</th>
               <th scope="col">{t('process.column.pid', 'PID')}</th>
-              <th scope="col">{t('process.column.name', 'Name')}</th>
               <th scope="col">{t('process.column.priority', 'Priority')}</th>
-              <th scope="col">{t('process.column.cpuSets', 'CPU Sets')}</th>
-              <th scope="col">{t('process.column.source', 'Source')}</th>
-              <th scope="col">{t('process.column.threads', 'Threads')}</th>
-              <th scope="col">{t('process.column.gen', 'Gen')}</th>
+              <th scope="col">{t('process.column.cpuPlacement', 'CPU allocation')}</th>
+              <th scope="col">{t('process.column.reason', 'Why it matters')}</th>
             </tr>
           </thead>
           <tbody>
             {filteredProcesses.length ? (
               filteredProcesses.map((process) => (
-                <tr key={`${process.pid}-${process.create_time || 0}`} className={`process-row ${process.status || 'tracked'}`}>
-                  <td><ProcessStatusBadge status={process.status} /></td>
-                  <td className="mono">{process.pid}</td>
+                <tr key={`${process.pid}-${process.create_time || 0}`} className={`process-row ${processActionStatus(process)}`}>
+                  <td><ProcessStatusBadge status={processActionStatus(process)} /></td>
                   <td className="process-name" title={process.name || ''}>{process.name || t('process.nameFallback', 'process')}</td>
+                  <td className="mono">{process.pid}</td>
                   <td>{formatPriorityLabel(process.priority_class, t)}</td>
                   <td className="mono" title={formatCpuSetsLabel(process, t)}>
                     {formatCpuSetsLabel(process, t)}
                   </td>
-                  <td>{process.source || t('process.source.tracked', 'tracked')}</td>
-                  <td className="mono">{process.thread_count ?? 0}</td>
-                  <td className="mono">{process.gen ?? 0}</td>
+                  <td>{processReason(process, t)}</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td className="process-empty" colSpan={8}>{t('process.empty', 'No tracked processes match the current view')}</td>
+                <td className="process-empty" colSpan={6}>{t('process.empty', 'No optimization activity matches this view')}</td>
               </tr>
             )}
           </tbody>

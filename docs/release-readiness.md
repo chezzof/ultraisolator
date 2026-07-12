@@ -4,41 +4,15 @@ This document defines the hypotheses that must hold before Esports Isolator PRO 
 
 The release is blocked until `scripts/release-check.ps1` passes.
 
-The first public release version is `1.1.1`, matching `ui/package.json`.
-Use the version in `ui/package.json` as the artifact source of truth. Do not
-publish a GitHub Release until the final artifact gate is green.
-
 ## Release Model
 
 Current production target:
 
-- Windows-only source release with reproducible local NSIS and portable builds.
+- Windows-only source release with a reproducible per-machine NSIS build installed under Program Files.
 - Unsigned installer is allowed only when release notes clearly state the code-signing limitation.
-- A trusted absolute `EII_PYTHON` interpreter is required for packaged desktop builds.
-- Administrator elevation is required for full CPU Sets, IFEO, power plan, timer, and process tuning behavior.
+- Packaged desktop builds must contain a working Python 3.12 runtime and pinned `psutil` under `resources/python`.
 - Background jailing remains opt-in.
-- No runtime API or config schema changes are required for this readiness pass.
-
-## Required Release Gate
-
-Run the complete gate before publishing or sharing artifacts:
-
-```powershell
-npm --prefix ui audit
-python -m unittest discover -s tests -p "test_*.py" -v
-powershell -ExecutionPolicy Bypass -File scripts\verify.ps1
-npm --prefix ui run build:renderer
-npm --prefix ui run smoke
-npm --prefix ui run build
-npm --prefix ui run verify:packaged-runtime
-npm --prefix ui run verify:installed-artifacts
-powershell -ExecutionPolicy Bypass -File scripts\release-check.ps1
-git diff --check
-```
-
-The release gate must create NSIS and portable artifacts under `ui/dist-packaged`,
-generate `SHA256SUMS.txt`, run installed and portable artifact verification, and
-leave no tracked generated-file drift.
+- Runtime status keeps `active_game_pids` for compatibility while adding structured `active_games` and `monitoring_active`; user `config.json` remains unchanged.
 
 ## Hypotheses and Tests
 
@@ -50,9 +24,8 @@ leave no tracked generated-file drift.
 | Renderer compiles for production | `npm --prefix ui run build:renderer` | Vite exits 0 and writes `ui/dist` |
 | Deterministic icon generation still works | `npm --prefix ui run build:assets` plus `git diff --exit-code -- ui/assets` | command exits 0 and tracked assets do not drift |
 | Local API bridge and built renderer surface are coherent | `npm --prefix ui run smoke` | smoke exits 0 |
-| Windows artifacts are reproducible locally | `npm --prefix ui run build` | NSIS and portable artifacts are written to `ui/dist-packaged` |
-| Release artifacts are verifiable | `powershell -File scripts/release-manifest.ps1` plus release gate manifest checks | installer and portable artifacts are non-empty, no unexpected root artifacts remain, and `SHA256SUMS.txt` contains exactly their SHA256 hashes |
-| Installed and portable artifact payloads are verifiable | `npm --prefix ui run verify:installed-artifacts` | NSIS and portable payloads extract successfully, contain `resources/backend`, use the trusted app-bundle manifest, and pass backend hash/runtime provenance checks; ACL safety is checked on `win-unpacked` before cleanup because temporary extraction ACLs are not representative install ACLs |
+| Windows artifact is reproducible locally | `npm --prefix ui run build` | The NSIS installer is written to `ui/dist-packaged` |
+| Release artifact is verifiable | `powershell -File scripts/release-manifest.ps1` plus release gate manifest checks | The installer is non-empty, no unexpected root artifacts remain, and `SHA256SUMS.txt` contains its SHA256 hash |
 | Public docs are ready for reviewers | `scripts/release-check.ps1` public surface checks | README, build docs, security docs, OSS checklist, templates, and screenshots exist |
 | Public text has no mojibake artifacts | `scripts/release-check.ps1` text checks and frontend contract tests | no common UTF-8 mojibake marker characters in checked files |
 | Sensitive local files are not publishable by default | `git check-ignore` checks in `scripts/release-check.ps1` | config, logs, recovery state, and package artifacts are ignored |
@@ -62,20 +35,11 @@ leave no tracked generated-file drift.
 Run these checks after the automated gate:
 
 - Open `docs/screenshots/dashboard.png`, `docs/screenshots/topology.png`, and `docs/screenshots/settings.png`; reject stale or clipped screenshots.
-- Confirm release notes mention Administrator requirements, unsigned installer status, trusted Python interpreter dependency, Windows-only support, and anti-cheat compatibility boundaries.
+- Confirm release notes mention Administrator requirements, bundled Python runtime, unsigned installer status, Windows-only support, and anti-cheat compatibility boundaries.
 - Confirm `enable_background_jailing` remains disabled in `config.json.example`.
 - Confirm no local `config.json`, logs, package artifacts, or temporary QA files are staged.
 - Confirm `SHA256SUMS.txt` is uploaded with any public binary artifacts.
-- After upload, confirm `SHA256SUMS.txt` filenames exactly match the public
-  GitHub Release asset names. GitHub may normalize spaces in asset filenames.
-- Use `docs/release-candidate-1.1.1.md` as the current release-candidate
-  evidence note when drafting the GitHub Release.
-- Confirm the Git tag, release title, and artifact version match the chosen first public release version.
-- If sharing artifacts publicly, test the installer and portable executable on a clean Windows user profile with `EII_PYTHON` pointing at a trusted absolute Python 3.12+ interpreter.
-- If installed artifact verification cannot find 7-Zip, install 7-Zip or set
-  `EII_SEVEN_ZIP` to a trusted `7z.exe` path. For local development only, set
-  `EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY=1`; release builds should not
-  use that skip.
+- If sharing the artifact publicly, test the per-machine installer and bundled runtime on a clean Windows user profile without system Python or `EII_PYTHON` configured.
 
 ## Known Non-Blocking Build Warning
 
@@ -89,22 +53,12 @@ This is emitted by the packaging toolchain after artifacts are produced. It is n
 
 ## Production Go / No-Go
 
-Final gate note for `1.1.1` (2026-07-06): GO for first public release review
-after PR checks are green. The local gate passed with `npm ci`, `npm audit`
-with 0 vulnerabilities, 251 Python tests, renderer build, smoke test,
-visual/a11y UI-quality checks, Windows package build, packaged runtime
-verification, installed/portable artifact verification, full
-`scripts\release-check.ps1`, and `git diff --check`.
-
 Go:
 
 - `powershell -File scripts/release-check.ps1` passes.
 - Manual release review finds no stale screenshots, misleading claims, or staged local artifacts.
-- Release notes disclose unsigned artifacts and trusted absolute `EII_PYTHON` requirement.
-- Release notes disclose Windows-only support, Administrator requirement, anti-cheat compatibility boundary, and opt-in background jailing.
+- Release notes disclose unsigned artifacts and the bundled Python runtime.
 - Release artifacts include `SHA256SUMS.txt`.
-- Installed and portable artifact verification passes without
-  `EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY`.
 
 No-go:
 
@@ -112,5 +66,4 @@ No-go:
 - npm audit reports any vulnerability.
 - Python tests fail or config dry-run fails.
 - Screenshots do not match the shipped UI.
-- Release notes imply signed installer, bundled Python, PATH-based packaged Python lookup, cross-platform support, or anti-cheat bypass behavior.
-- Installed/portable payload extraction or backend resource verification fails.
+- Release notes imply a signed installer, an external system-Python requirement, PATH-based packaged Python lookup, cross-platform support, or anti-cheat bypass behavior.

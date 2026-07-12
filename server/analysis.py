@@ -16,15 +16,24 @@ def _grade_for_score(score):
     return "weak"
 
 
-def _boost_label_for_score(score):
-    remaining = max(0, 100 - int(score))
-    if remaining >= 25:
-        return "high"
-    if remaining >= 10:
-        return "moderate"
-    if remaining > 0:
-        return "low"
-    return "none"
+def _capability_warnings(status):
+    structured = status.get("capability_issues")
+    if isinstance(structured, (list, tuple)) and structured:
+        return [
+            issue
+            for issue in structured
+            if isinstance(issue, dict)
+            and str(issue.get("severity", "")).lower() in {"warning", "error"}
+        ]
+    return [
+        {
+            "code": "legacy_capability_note",
+            "severity": "warning",
+            "message": str(note),
+            "data": {},
+        }
+        for note in status.get("capability_notes", []) or []
+    ]
 
 
 def _check(check_id, label, category, max_score, passed, detail_ok, detail_bad, bad_status="warning", partial_score=0):
@@ -66,13 +75,6 @@ def build_analysis_payload(status, topology, config, topology_refreshes=0):
             "grade": "paused",
             "summary": "Analysis paused during game mode.",
             "categories": [],
-            "boost_potential": {"label": "none", "points": 0},
-            "bottleneck": {
-                "available": False,
-                "label": "Not estimated",
-                "reason": "gpu_metrics_not_collected",
-                "detail": "GPU and RAM telemetry are not collected in this MVP.",
-            },
             "checks": [],
             "analysis_calls": {
                 "status_reads": 1,
@@ -84,7 +86,7 @@ def build_analysis_payload(status, topology, config, topology_refreshes=0):
     summary = topology.get("summary", {}) if isinstance(topology, dict) else {}
     partitions = topology.get("partitions", {}) if isinstance(topology, dict) else {}
     partition_status = status.get("cpu_partitions", {}) if isinstance(status, dict) else {}
-    capability_notes = list(status.get("capability_notes", []) or [])
+    capability_warnings = _capability_warnings(status)
     reported_failure_count = int(status.get("reported_failure_count", 0) or 0)
 
     checks = []
@@ -167,7 +169,7 @@ def build_analysis_payload(status, topology, config, topology_refreshes=0):
 
     timer_enabled = not bool(config.get("disable_timer_resolution_tweak"))
     timer_applied = status.get("timer_resolution_applied")
-    timer_ready = bool(timer_enabled and timer_applied)
+    timer_ready = bool(timer_enabled or timer_applied)
     power_enabled = not bool(config.get("disable_power_scheme_switch"))
     game_priority_enabled = not bool(config.get("disable_game_priority_boost"))
 
@@ -177,8 +179,8 @@ def build_analysis_payload(status, topology, config, topology_refreshes=0):
         "Latency tuning",
         10,
         timer_ready,
-        "Timer resolution is applied.",
-        "Timer resolution is disabled or has not been applied yet.",
+        "Low-latency timing is active." if timer_applied else "Low-latency timing is configured and ready.",
+        "Low-latency timing is disabled.",
         partial_score=4 if not timer_enabled else 0,
         bad_status="info" if not timer_enabled else "warning",
     ))
@@ -206,7 +208,7 @@ def build_analysis_payload(status, topology, config, topology_refreshes=0):
     ))
 
     background_jailing_enabled = bool(config.get("enable_background_jailing"))
-    notes_clean = len(capability_notes) == 0
+    notes_clean = len(capability_warnings) == 0
 
     checks.append(_check(
         "background_jailing",
@@ -227,8 +229,8 @@ def build_analysis_payload(status, topology, config, topology_refreshes=0):
         notes_clean,
         "No capability warnings were reported.",
         "Capability warnings are present and should be reviewed.",
-        partial_score=max(0, 5 - min(5, len(capability_notes) * 2)),
-        bad_status="warning" if capability_notes else "ok",
+        partial_score=max(0, 5 - min(5, len(capability_warnings) * 2)),
+        bad_status="warning" if capability_warnings else "ok",
     ))
     checks.append(_check(
         "failure_count",
@@ -268,16 +270,6 @@ def build_analysis_payload(status, topology, config, topology_refreshes=0):
         "grade": _grade_for_score(score),
         "summary": summary_text,
         "categories": categories,
-        "boost_potential": {
-            "label": _boost_label_for_score(score),
-            "points": max(0, 100 - score),
-        },
-        "bottleneck": {
-            "available": False,
-            "label": "Not estimated",
-            "reason": "gpu_metrics_not_collected",
-            "detail": "GPU and RAM telemetry are not collected in this MVP.",
-        },
         "checks": checks,
         "analysis_calls": {
             "status_reads": 1,

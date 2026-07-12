@@ -16,8 +16,7 @@ const checksumManifestName = 'SHA256SUMS.txt';
 
 function expectedArtifactNames(version = packageConfig.version) {
   return [
-    `Esports Isolator PRO Setup ${version}.exe`,
-    `Esports-Isolator-PRO-${version}-portable.exe`
+    `Esports Isolator PRO Setup ${version}.exe`
   ];
 }
 
@@ -133,7 +132,7 @@ function resolveSevenZipCommand() {
   }
 
   throw new Error(
-    'Installed artifact verification requires 7-Zip to inspect NSIS and portable payloads. ' +
+    'Installed artifact verification requires 7-Zip to inspect the NSIS payload. ' +
     'Install 7-Zip or set EII_SEVEN_ZIP to a trusted 7z.exe path. ' +
     `For local development only, set ${releaseDevSkipFlag}=1 to skip this fail-closed release check.`
   );
@@ -256,7 +255,6 @@ function verifyInstalledArtifacts(options = {}) {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'eii-installed-artifacts-'));
   try {
     verifyExtractedArtifact(distDir, artifacts[0], 'installer', tempRoot, sevenZipCommand);
-    verifyExtractedArtifact(distDir, artifacts[1], 'portable', tempRoot, sevenZipCommand);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -268,7 +266,7 @@ function main() {
     return;
   }
   verifyInstalledArtifacts({ distDir: process.argv[2] || outputDir });
-  console.log('installed and portable artifact verification passed');
+  console.log('installed artifact verification passed');
 }
 
 if (require.main === module) {

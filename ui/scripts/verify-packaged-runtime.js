@@ -1,18 +1,16 @@
 #!/usr/bin/env node
 
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const asar = require('@electron/asar');
 const runtime = require('../backend-runtime');
 
 const uiRoot = path.resolve(__dirname, '..');
 const packageConfig = require('../package.json');
 
-function extractAsarFile(asarPath, filePath) {
-  const asar = require('@electron/asar');
-  return asar.extractFile(asarPath, filePath);
-}
-
-function findPackagedBackendRoot(outputDir = path.join(uiRoot, packageConfig.build.directories.output || 'dist-packaged')) {
+function findPackagedBackendRoot() {
+  const outputDir = path.join(uiRoot, packageConfig.build.directories.output || 'dist-packaged');
   const candidates = [
     path.join(outputDir, 'win-unpacked', 'resources', 'backend'),
     path.join(outputDir, 'win-ia32-unpacked', 'resources', 'backend'),
@@ -30,7 +28,7 @@ function findPackagedManifestPath(backendRoot) {
   const resourcesRoot = path.dirname(backendRoot);
   const appAsar = path.join(resourcesRoot, 'app.asar');
   if (fs.existsSync(appAsar)) {
-    const bytes = extractAsarFile(appAsar, 'backend-manifest.json');
+    const bytes = asar.extractFile(appAsar, 'backend-manifest.json');
     return {
       manifestPath: path.join(appAsar, 'backend-manifest.json'),
       manifest: JSON.parse(Buffer.from(bytes).toString('utf8'))
@@ -54,17 +52,23 @@ function assertManifestCoversBuildConfig() {
     throw new Error('backend-manifest.json must be included in the trusted app bundle files.');
   }
   const scripts = packageConfig.scripts || {};
-  if (!scripts['build:backend-manifest'] || !scripts['verify:packaged-runtime']) {
-    throw new Error('package scripts must declare build:backend-manifest and verify:packaged-runtime.');
+  if (!scripts['build:backend-manifest'] || !scripts['build:python-runtime'] || !scripts['verify:packaged-runtime']) {
+    throw new Error('package scripts must build the backend manifest and Python runtime before verification.');
   }
   const buildScript = scripts.build || '';
-  if (!buildScript.includes('build:backend-manifest')) {
-    throw new Error('production build must generate the backend manifest before packaging.');
+  if (!buildScript.includes('build:backend-manifest') || !buildScript.includes('build:python-runtime')) {
+    throw new Error('production build must generate the backend manifest and Python runtime before packaging.');
+  }
+  const extraResources = packageConfig.build.extraResources || [];
+  const bundledPython = extraResources.some((resource) => (
+    resource && resource.from === '.runtime/python' && resource.to === 'python'
+  ));
+  if (!bundledPython) {
+    throw new Error('production build must copy .runtime/python to resources/python.');
   }
 }
 
-function assertPackagedPythonPolicy(resourcesRoot, options = {}) {
-  const writableCheck = options.isPathWritableByStandardUsers || runtime.isPathWritableByStandardUsers;
+function assertPackagedPythonPolicy(resourcesRoot) {
   const command = 'C:\\Users\\attacker\\python.exe';
   let rejectedArbitraryPython = false;
   try {
@@ -86,51 +90,63 @@ function assertPackagedPythonPolicy(resourcesRoot, options = {}) {
   }
 
   const bundledPythonPath = path.join(resourcesRoot, 'python', 'python.exe');
-  try {
-    runtime.resolvePackagedPythonCommand({
-      env: {},
-      app: { isPackaged: true },
-      bundledPythonPath,
-      trustedRoots: [path.dirname(bundledPythonPath)],
-      isPathWritableByStandardUsers: writableCheck
-    });
-  } catch (error) {
-    if (!fs.existsSync(bundledPythonPath) && String(error.message).toLowerCase().includes('missing')) {
-      return;
-    }
-    throw error;
-  }
+  return runtime.resolvePackagedPythonCommand({
+    env: {},
+    app: { isPackaged: true },
+    bundledPythonPath,
+    trustedRoots: [path.dirname(bundledPythonPath)],
+    isPathWritableByStandardUsers: runtime.isPathWritableByStandardUsers
+  });
 }
 
-function verifyPackagedRuntime(backendRoot, options = {}) {
-  assertManifestCoversBuildConfig();
-  const resolvedBackendRoot = backendRoot ? path.resolve(backendRoot) : findPackagedBackendRoot();
-  assertPackagedPythonPolicy(path.dirname(resolvedBackendRoot), options);
-  const packagedManifest = findPackagedManifestPath(resolvedBackendRoot);
-  runtime.verifyBackendResourceIntegrity({
-    backendRoot: resolvedBackendRoot,
-    manifestPath: packagedManifest.manifestPath,
-    manifest: packagedManifest.manifest,
-    isPathWritableByStandardUsers: options.isPathWritableByStandardUsers || runtime.isPathWritableByStandardUsers
+function runPackagedPython(command, args, cwd) {
+  const result = spawnSync(command, args, {
+    cwd,
+    windowsHide: true,
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe']
   });
-  return resolvedBackendRoot;
+  if (result.error || result.status !== 0) {
+    const detail = result.error ? result.error.message : (result.stderr || result.stdout).trim();
+    throw new Error(`Packaged Python probe failed: ${detail}`);
+  }
+  return result.stdout.trim();
+}
+
+function assertPackagedPythonWorks(command, resourcesRoot, backendRoot) {
+  const versionText = runPackagedPython(command, ['--version'], backendRoot);
+  const version = versionText.match(/Python\s+(\d+)\.(\d+)/);
+  if (!version || Number(version[1]) !== 3 || Number(version[2]) < 12) {
+    throw new Error(`Packaged Python 3.12 or newer is required; found ${versionText || 'unknown'}.`);
+  }
+
+  const dependencyText = runPackagedPython(command, ['-I', '-c', [
+    'import json, psutil, sys',
+    'print(json.dumps({"prefix": sys.prefix, "psutil": psutil.__version__}))'
+  ].join('; ')], backendRoot);
+  const dependency = JSON.parse(dependencyText);
+  const expectedPrefix = path.resolve(resourcesRoot, 'python').toLowerCase();
+  if (path.resolve(dependency.prefix).toLowerCase() !== expectedPrefix) {
+    throw new Error(`Packaged Python resolved outside resources/python: ${dependency.prefix}`);
+  }
+
+  runPackagedPython(command, ['-c', 'import isolator, server; print("backend-import-ok")'], backendRoot);
 }
 
 function main() {
-  const backendRoot = verifyPackagedRuntime(process.argv[2]);
+  assertManifestCoversBuildConfig();
+  const backendRoot = process.argv[2] ? path.resolve(process.argv[2]) : findPackagedBackendRoot();
+  const resourcesRoot = path.dirname(backendRoot);
+  const packagedPython = assertPackagedPythonPolicy(resourcesRoot);
+  assertPackagedPythonWorks(packagedPython, resourcesRoot, backendRoot);
+  const packagedManifest = findPackagedManifestPath(backendRoot);
+  runtime.verifyBackendResourceIntegrity({
+    backendRoot,
+    manifestPath: packagedManifest.manifestPath,
+    manifest: packagedManifest.manifest
+  });
   console.log(`packaged runtime verified: ${backendRoot}`);
 }
 
-if (require.main === module) {
-  main();
-}
-
-module.exports = {
-  assertManifestCoversBuildConfig,
-  assertPackagedPythonPolicy,
-  extractAsarFile,
-  findPackagedBackendRoot,
-  findPackagedManifestPath,
-  main,
-  verifyPackagedRuntime
-};
+main();

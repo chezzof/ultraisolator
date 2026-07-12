@@ -39,7 +39,39 @@ class RuntimeMixin:
                 if now - first_seen >= self.game_close_debounce_s:
                     confirmed_closed.append(pid)
                     pending_closed.pop(pid, None)
-        return new_games, confirmed_closed, current_game_pids, pending_closed
+        retained_games = (active_games | current_game_pids) - set(confirmed_closed)
+        return new_games, confirmed_closed, retained_games, pending_closed
+
+    def _update_active_game_observations(self, observed_games, pending_closed, now):
+        observed_games = {
+            int(pid): self._normalize_name(name)
+            for pid, name in dict(observed_games or {}).items()
+        }
+        current_game_pids = set(observed_games)
+        with self._state_lock:
+            active_game_pids = set(self._active_games)
+            new_games, confirmed_closed, retained_games, pending_closed = self._process_game_pid_transitions(
+                active_game_pids,
+                current_game_pids,
+                pending_closed,
+                now,
+            )
+            for pid, name in observed_games.items():
+                game = self._active_games.setdefault(pid, {
+                    "pid": pid,
+                    "name": name,
+                    "tuning_state": "pending",
+                })
+                game["name"] = name
+            for pid in confirmed_closed:
+                self._active_games.pop(pid, None)
+        return new_games, confirmed_closed, retained_games, pending_closed
+
+    def _set_active_game_tuning_state(self, pid, tuning_state):
+        with self._state_lock:
+            game = self._active_games.get(int(pid))
+            if game is not None:
+                game["tuning_state"] = tuning_state
 
     def _foreground_transition_due(self, now, last_transition_time):
         return now - last_transition_time >= self._foreground_transition_debounce_s
@@ -89,7 +121,7 @@ class RuntimeMixin:
 
         with self._state_lock:
             for pid in pids:
-                if pid not in active_pids:
+                if pid not in active_pids and pid not in game_pids:
                     self._touched.pop(pid, None)
                     self._last_hot_thread_refresh.pop(pid, None)
                 elif pid not in game_pids and pid != fg_pid:
@@ -195,26 +227,49 @@ class RuntimeMixin:
             if now - self._last_topology_refresh > 300.0:
                 self._refresh_topology("periodic")
             if self.auto_detect_steam and now - self._last_steam_scan > 300.0:
-                self._scan_steam_games()
+                self._scan_steam_games(force=self._last_steam_scan == float("-inf"))
             if self.auto_detect_epic and now - self._last_epic_scan > 300.0:
-                self._scan_epic_games()
+                self._scan_epic_games(force=self._last_epic_scan == float("-inf"))
+
+            # An empty SPI result is an enumeration failure, not proof that every
+            # process exited. Keep all observation/debounce state unchanged and
+            # retry on the next poll instead of restoring a still-running game.
+            if not processes:
+                self._log_once(
+                    ("monitor_empty_snapshot",),
+                    "[INFO] Process enumeration returned no entries; keeping the last game observation.",
+                )
+                with self._state_lock:
+                    active_games = set(self._active_games)
+                next_interval = _poll_active if active_games else _poll_idle
+                if _stop_event.wait(next_interval):
+                    break
+                continue
                 
             cleanup_due = now - last_cleanup > 60.0
             current_game_pids = set()
             cleanup_ran = False
             try:
-                current_game_pids = set(self._find_game_processes(processes))
+                observed_games = self._find_game_process_entries(processes)
+                current_game_pids = set(observed_games)
                 last_known_game_pids = current_game_pids
+                new_games, confirmed_closed, active_games, pending_closed = self._update_active_game_observations(
+                    observed_games,
+                    pending_closed,
+                    now,
+                )
                 if cleanup_due:
-                    self._cleanup_dead_processes(processes, game_pids=current_game_pids)
+                    self._cleanup_dead_processes(processes, game_pids=active_games)
                     last_cleanup = now
                     cleanup_ran = True
-                new_games, confirmed_closed, active_games, pending_closed = self._process_game_pid_transitions(
-                    active_games, current_game_pids, pending_closed, now
-                )
 
                 for pid in new_games:
-                    self._optimize_game(pid)
+                    tuning_state = self._optimize_game_with_state(
+                        pid,
+                        observed_games[pid],
+                        classified_as_game=True,
+                    )
+                    self._set_active_game_tuning_state(pid, tuning_state)
                 for pid in confirmed_closed:
                     self._restore_process(pid)
                     self._log(f"[GAME] Game closed: pid={pid}")
@@ -462,6 +517,9 @@ class RuntimeMixin:
             self._log("[INFO] Installed native Windows console control handler for safe shutdown.")
 
     def run(self):
+        if not is_process_elevated():
+            self._log("[ERROR] administrator_required")
+            return False
         if not self._ensure_single_instance():
             return False
 
@@ -542,6 +600,8 @@ class RuntimeMixin:
             if not fast and self._monitor_thread and self._monitor_thread.is_alive() and threading.current_thread() is not self._monitor_thread:
                 self._monitor_thread.join(timeout=3.0)
             self._wait_for_process_mutations()
+            with self._state_lock:
+                self._active_games.clear()
             self._log("[SHUTDOWN] Step 1/8: Monitor thread signalled; active mutations drained.")
         except Exception as e:
             self._log(f"[ERROR] Shutdown step 1: failed to stop monitor thread: {e}")

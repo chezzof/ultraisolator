@@ -9,19 +9,22 @@
   "scripts": {
     "start": "electron .",
     "dev": "node scripts/dev-runner.js",
-    "dev:renderer": "vite --host 127.0.0.1",
+    "dev:renderer": "node scripts/dev-runner.js --renderer-only",
+    "preview:test": "vite preview --host 127.0.0.1",
     "smoke": "node scripts/smoke-test.js",
+    "test:unit": "node --test tests/*.test.mjs",
     "build:renderer": "vite build",
     "build:assets": "node scripts/generate-assets.js",
     "build:backend-manifest": "node scripts/generate-backend-manifest.js",
+    "build:python-runtime": "node scripts/prepare-python-runtime.js",
     "verify:packaged-runtime": "node scripts/verify-packaged-runtime.js",
     "verify:installed-artifacts": "node scripts/verify-installed-artifacts.js",
     "clean:packaged": "node scripts/clean-packaged-output.js",
     "test:visual": "playwright test --config playwright.config.js tests/visual",
     "test:a11y": "playwright test --config playwright.config.js tests/a11y",
     "test:ui-quality": "npm run build:renderer && npm run test:visual && npm run test:a11y",
-    "pack": "npm run clean:packaged && npm run build:renderer && npm run build:assets && npm run build:backend-manifest && electron-builder --dir && node scripts/harden-packaged-backend-acl.js dist-packaged/win-unpacked",
-    "build": "npm run clean:packaged && npm run build:renderer && npm run build:assets && npm run build:backend-manifest && electron-builder --win nsis portable && node scripts/harden-packaged-backend-acl.js dist-packaged/win-unpacked"
+    "pack": "npm run clean:packaged && npm run build:renderer && npm run build:assets && npm run build:backend-manifest && npm run build:python-runtime && electron-builder --dir && node scripts/harden-packaged-backend-acl.js dist-packaged/win-unpacked",
+    "build": "npm run clean:packaged && npm run build:renderer && npm run build:assets && npm run build:backend-manifest && npm run build:python-runtime && electron-builder --win nsis && node scripts/harden-packaged-backend-acl.js dist-packaged/win-unpacked"
   },
   "dependencies": {
     "@carbon/icons-react": "11.80.0",
@@ -77,27 +80,27 @@
       {
         "from": "../requirements.txt",
         "to": "backend/requirements.txt"
+      },
+      {
+        "from": ".runtime/python",
+        "to": "python"
       }
     ],
     "win": {
       "icon": "assets/icon.ico",
       "requestedExecutionLevel": "requireAdministrator",
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ]
     },
     "nsis": {
       "oneClick": false,
-      "perMachine": false,
+      "perMachine": true,
       "allowElevation": true,
-      "allowToChangeInstallationDirectory": true,
+      "allowToChangeInstallationDirectory": false,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
       "installerHeaderIcon": "assets/icon.ico"
-    },
-    "portable": {
-      "artifactName": "Esports-Isolator-PRO-${version}-portable.${ext}"
     }
   }
 }

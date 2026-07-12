@@ -16,7 +16,9 @@ module.exports = defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
   webServer: {
-    command: `npm run dev:renderer -- --port ${PORT} --strictPort`,
+    // Renderer QA serves the already-built static bundle. The normal dev
+    // command remains fail-closed behind the Administrator elevation probe.
+    command: `npm run preview:test -- --port ${PORT} --strictPort`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120000,

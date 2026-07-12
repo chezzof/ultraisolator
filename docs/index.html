@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#07090e">
+    <meta
+      name="description"
+      content="UltraIsolator is a local, reversible Windows process tuner built for steadier frame times in competitive games."
+    >
+    <meta property="og:title" content="UltraIsolator — Protect the frame">
+    <meta
+      property="og:description"
+      content="Detect the game, review the plan, isolate background work, and restore Windows when the session ends."
+    >
+    <meta property="og:type" content="website">
+    <meta
+      property="og:image"
+      content="https://raw.githubusercontent.com/chezzof/ultraisolator/main/docs/social-preview.png"
+    >
+    <link rel="canonical" href="https://github.com/chezzof/ultraisolator">
+    <link rel="icon" href="assets/icon.png" type="image/png">
+    <link rel="stylesheet" href="site.css?v=responsive-images">
+    <title>UltraIsolator — Frame-time stability for Windows</title>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    <header class="site-header">
+      <div class="shell header-inner">
+        <a class="brand" href="#top" aria-label="UltraIsolator home">
+          <img src="assets/icon.png" width="32" height="32" alt="">
+          <span>UltraIsolator</span>
+        </a>
+
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="#workflow">How it works</a>
+          <a href="#product">Product</a>
+          <a href="#benchmark">Benchmark</a>
+          <a href="#safety">Safety</a>
+        </nav>
+
+        <a
+          class="button button-small button-secondary header-cta"
+          href="https://github.com/chezzof/ultraisolator/releases/latest"
+        >
+          Download for Windows
+        </a>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="shell hero-layout">
+          <div class="hero-copy">
+            <p class="eyebrow">Windows process isolation for competitive play</p>
+            <h1 id="hero-title">Protect the frame.</h1>
+            <p class="hero-lede">
+              UltraIsolator keeps background scheduling noise away from the game,
+              then returns Windows to its previous state when the session ends.
+            </p>
+
+            <div class="hero-actions">
+              <a
+                class="button button-primary"
+                href="https://github.com/chezzof/ultraisolator/releases/latest"
+              >
+                Download for Windows
+              </a>
+              <a
+                class="button button-secondary"
+                href="https://github.com/chezzof/ultraisolator"
+              >
+                View on GitHub
+              </a>
+            </div>
+
+            <p class="hero-note">
+              Windows 10/11 · Administrator access required for full tuning · MIT licensed
+            </p>
+          </div>
+
+          <figure class="hero-product">
+            <div class="window-bar" aria-hidden="true">
+              <span>UltraIsolator</span>
+              <span>Session control</span>
+            </div>
+            <img
+              src="screenshots/dashboard.png?v=competitive-focus"
+              width="1440"
+              height="1024"
+              alt="UltraIsolator dashboard showing engine state, game readiness, process isolation, and restore controls"
+            >
+            <figcaption>
+              One place to inspect readiness, start isolation, and restore the system.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="proof-strip" aria-label="Product facts">
+        <div class="shell proof-grid">
+          <div>
+            <strong>Windows 10/11</strong>
+            <span>Built for the platform it tunes</span>
+          </div>
+          <div>
+            <strong>Local by design</strong>
+            <span>No remote runtime or cloud account</span>
+          </div>
+          <div>
+            <strong>MIT licensed</strong>
+            <span>Open source and inspectable</span>
+          </div>
+          <div>
+            <strong>Reversible</strong>
+            <span>Restore is part of the session lifecycle</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section problem" aria-labelledby="problem-title">
+        <div class="shell split-heading">
+          <div>
+            <p class="section-label">The real target</p>
+            <h2 id="problem-title">Average FPS is only half the story.</h2>
+          </div>
+          <div class="section-intro">
+            <p>
+              A browser helper, updater, launcher, overlay, or capture service can wake at
+              the wrong moment. UltraIsolator is designed around steadier frame delivery:
+              clearer CPU placement, controlled background work, and a known path back.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section workflow" id="workflow" aria-labelledby="workflow-title">
+        <div class="shell">
+          <div class="section-heading">
+            <p class="section-label">A controlled session</p>
+            <h2 id="workflow-title">Every change has a before and an after.</h2>
+            <p>
+              The default path stays understandable. Expert controls remain available
+              when you need them.
+            </p>
+          </div>
+
+          <ol class="workflow-grid">
+            <li>
+              <span class="step-number">01</span>
+              <h3>Detect</h3>
+              <p>Find configured games and inspect Windows, CPU topology, and readiness.</p>
+            </li>
+            <li>
+              <span class="step-number">02</span>
+              <h3>Review</h3>
+              <p>See what the selected preset can change before the engine starts.</p>
+            </li>
+            <li>
+              <span class="step-number">03</span>
+              <h3>Isolate</h3>
+              <p>Reserve game capacity and move eligible background work out of its way.</p>
+            </li>
+            <li>
+              <span class="step-number">04</span>
+              <h3>Restore</h3>
+              <p>Return priorities, CPU placement, timer state, and the power plan after play.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section product" id="product" aria-labelledby="product-title">
+        <div class="shell">
+          <div class="section-heading section-heading-wide">
+            <p class="section-label">Built for clarity under load</p>
+            <h2 id="product-title">The whole tuning path stays visible.</h2>
+            <p>
+              Live engine state, CPU partitions, protected processes, and expert settings
+              remain inspectable throughout the session.
+            </p>
+          </div>
+
+          <div class="feature feature-primary">
+            <div class="feature-copy">
+              <p class="feature-kicker">Mission control</p>
+              <h3>Know what is active before you queue.</h3>
+              <p>
+                Readiness checks, the current power plan, timer status, isolated process
+                count, and the restore action share one operational view.
+              </p>
+              <ul class="plain-list">
+                <li>Game and engine state at a glance</li>
+                <li>Explicit start, stop, and restore controls</li>
+                <li>Warnings stay visible instead of being hidden</li>
+              </ul>
+            </div>
+            <figure class="product-shot product-shot-large">
+              <img
+                src="screenshots/dashboard.png?v=competitive-focus"
+                width="1440"
+                height="1024"
+                alt="UltraIsolator mission-control dashboard with readiness cards and session controls"
+                loading="lazy"
+              >
+            </figure>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature-card">
+              <figure class="product-shot">
+                <img
+                  src="screenshots/topology.png?v=competitive-focus"
+                  width="1440"
+                  height="1024"
+                  alt="CPU topology view showing game, background, and housekeeping core partitions"
+                  loading="lazy"
+                >
+              </figure>
+              <div>
+                <p class="feature-kicker">Topology</p>
+                <h3>See where the work goes.</h3>
+                <p>
+                  Inspect game, background, and housekeeping partitions down to the
+                  logical-processor level.
+                </p>
+              </div>
+            </article>
+
+            <article class="feature-card">
+              <figure class="product-shot">
+                <img
+                  src="screenshots/settings.png?v=competitive-focus"
+                  width="1440"
+                  height="1024"
+                  alt="Settings view showing game detection, background jailing, and protection controls"
+                  loading="lazy"
+                >
+              </figure>
+              <div>
+                <p class="feature-kicker">Expert controls</p>
+                <h3>Choose the boundary.</h3>
+                <p>
+                  Configure detection, protected processes, anti-cheat posture, timing,
+                  and opt-in background jailing.
+                </p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section benchmark" id="benchmark" aria-labelledby="benchmark-title">
+        <div class="shell benchmark-layout">
+          <div class="benchmark-copy">
+            <p class="section-label">Measured, not implied</p>
+            <h2 id="benchmark-title">A reproducible frametime case.</h2>
+            <p>
+              The public CS2 VProf summary compares the same workload with and without
+              UltraIsolator. Its most useful signal is tail behavior, not a universal FPS promise.
+            </p>
+            <a
+              class="text-link"
+              href="https://github.com/chezzof/ultraisolator/blob/main/benchmark-results-hud.html"
+            >
+              Read the benchmark report
+            </a>
+          </div>
+
+          <div class="benchmark-panel" aria-label="CS2 VProf benchmark summary">
+            <div class="metric-row">
+              <div>
+                <span>FrameTotal P95 spike</span>
+                <strong>8.87 ms</strong>
+                <small>without</small>
+              </div>
+              <div>
+                <span>FrameTotal P95 spike</span>
+                <strong>6.56 ms</strong>
+                <small>with UltraIsolator</small>
+              </div>
+            </div>
+            <div class="metric-row metric-row-secondary">
+              <div>
+                <span>Client Rendering P95 spike</span>
+                <strong>5.29 ms</strong>
+                <small>without</small>
+              </div>
+              <div>
+                <span>Client Rendering P95 spike</span>
+                <strong>2.75 ms</strong>
+                <small>with UltraIsolator</small>
+              </div>
+            </div>
+            <p class="method-note">
+              Source: Counter-Strike 2 VProf, same captured workload. Results are
+              workload-specific and should be reproduced on your hardware. Background
+              jailing remains opt-in.
+            </p>
+            <a class="source-link" href="benchmarks/cs2-vprof-summary.json">
+              View structured source data
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section safety" id="safety" aria-labelledby="safety-title">
+        <div class="shell safety-layout">
+          <div class="section-heading">
+            <p class="section-label">Safety is a product surface</p>
+            <h2 id="safety-title">Strong controls. Clear escape routes.</h2>
+            <p>
+              UltraIsolator changes sensitive Windows scheduling controls, so it treats
+              protection and recovery as first-class behavior.
+            </p>
+          </div>
+
+          <div class="safety-list">
+            <article>
+              <h3>Protected by default</h3>
+              <p>
+                Windows system processes, anti-cheat-sensitive paths, Steam, FACEIT,
+                and terminal hosts stay outside background jailing.
+              </p>
+            </article>
+            <article>
+              <h3>Opt-in where it matters</h3>
+              <p>
+                Background jailing starts disabled. Conservative anti-cheat mode is
+                available for stricter environments.
+              </p>
+            </article>
+            <article>
+              <h3>Recovery survives the session</h3>
+              <p>
+                Power-plan and process state are captured for restoration, including
+                recovery after an interrupted run.
+              </p>
+            </article>
+            <article>
+              <h3>Local and inspectable</h3>
+              <p>
+                The app runs locally, does not download executable code at runtime, and
+                publishes its implementation under the MIT license.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section faq" id="faq" aria-labelledby="faq-title">
+        <div class="shell faq-layout">
+          <div>
+            <p class="section-label">Before you install</p>
+            <h2 id="faq-title">Questions worth answering.</h2>
+          </div>
+
+          <div class="faq-list">
+            <details>
+              <summary>Does UltraIsolator guarantee more FPS?</summary>
+              <p>
+                No. Its goal is to reduce avoidable background scheduling noise and make
+                tuning state visible. Performance varies by game, hardware, software, and workload.
+              </p>
+            </details>
+            <details>
+              <summary>Why does it need Administrator access?</summary>
+              <p>
+                Full CPU Sets, process priority, power-plan, timer, and recovery behavior
+                use Windows controls that require elevated permissions.
+              </p>
+            </details>
+            <details>
+              <summary>Is background jailing enabled automatically?</summary>
+              <p>
+                No. It is opt-in and disabled by default. Review the configuration and
+                protected-process list before enabling it.
+              </p>
+            </details>
+            <details>
+              <summary>What happens when the game closes?</summary>
+              <p>
+                After the configured exit delay, UltraIsolator restores tracked process
+                placement, priority, timer state, and the original power plan.
+              </p>
+            </details>
+            <details>
+              <summary>Can I inspect the code and benchmark data?</summary>
+              <p>
+                Yes. The source, tests, build instructions, security notes, and structured
+                CS2 VProf summary are published in the GitHub repository.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="final-cta" aria-labelledby="final-cta-title">
+        <div class="shell final-cta-inner">
+          <div>
+            <p class="section-label">Ready when Windows is</p>
+            <h2 id="final-cta-title">Make every frame easier to trust.</h2>
+            <p>Download the latest Windows build, or inspect every change on GitHub first.</p>
+          </div>
+          <div class="final-actions">
+            <a
+              class="button button-primary"
+              href="https://github.com/chezzof/ultraisolator/releases/latest"
+            >
+              Download for Windows
+            </a>
+            <a
+              class="button button-secondary"
+              href="https://github.com/chezzof/ultraisolator"
+            >
+              Explore the source
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-inner">
+        <div class="footer-brand">
+          <img src="assets/icon.png" width="28" height="28" alt="">
+          <div>
+            <strong>UltraIsolator</strong>
+            <span>Open-source Windows process tuning.</span>
+          </div>
+        </div>
+        <nav aria-label="Footer navigation">
+          <a href="https://github.com/chezzof/ultraisolator">GitHub</a>
+          <a href="https://github.com/chezzof/ultraisolator/releases/latest">Releases</a>
+          <a href="https://github.com/chezzof/ultraisolator/blob/main/SECURITY.md">Security</a>
+          <a href="https://github.com/chezzof/ultraisolator/blob/main/LICENSE">MIT license</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

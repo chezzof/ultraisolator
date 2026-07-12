@@ -106,7 +106,7 @@ class FakeTopologyEngine:
 class TopologyHttpTests(unittest.TestCase):
     def test_topology_endpoint_returns_bridge_snapshot(self):
         engine = FakeTopologyEngine()
-        bridge = IsolatorBridge(engine_factory=lambda *_args: engine)
+        bridge = IsolatorBridge(engine_factory=lambda *_args: engine, admin_check=lambda: True)
         bridge.start()
         server = create_server(("127.0.0.1", 0), create_handler(bridge))
         thread = threading.Thread(target=server.serve_forever, daemon=True)

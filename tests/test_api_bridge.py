@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from isolator.app import EsportsIsolatorPro
 from server.__main__ import _parent_heartbeat_loop, main as server_main
-from server.bridge import BridgeConflict, IsolatorBridge
+from server.bridge import AdministratorRequired, BridgeConflict, IsolatorBridge
 from server.http_api import create_handler, create_server
 
 
@@ -26,6 +26,11 @@ class RuntimeStatusSnapshotTests(unittest.TestCase):
         isolator._get_processes = lambda: (_ for _ in ()).throw(AssertionError("_get_processes must not run"))
 
         with isolator._state_lock:
+            isolator._active_games[42] = {
+                "pid": 42,
+                "name": "cs2.exe",
+                "tuning_state": "applied",
+            }
             isolator._entry_gen += 1
             isolator._touched[42] = {
                 "name": "cs2.exe",
@@ -63,6 +68,11 @@ class RuntimeStatusSnapshotTests(unittest.TestCase):
         isolator._get_processes = lambda: (_ for _ in ()).throw(AssertionError("_get_processes must not run"))
 
         with isolator._state_lock:
+            isolator._active_games[42] = {
+                "pid": 42,
+                "name": "cs2.exe",
+                "tuning_state": "applied",
+            }
             isolator._entry_gen += 1
             isolator._touched[42] = {
                 "name": "cs2.exe",
@@ -169,6 +179,17 @@ class FakeEngine:
 
 
 class BridgeLifecycleTests(unittest.TestCase):
+    def test_stopped_status_keeps_the_complete_runtime_schema(self):
+        bridge = IsolatorBridge(admin_check=lambda: True)
+
+        status = bridge.status()
+
+        self.assertFalse(status["monitoring_active"])
+        self.assertEqual([], status["active_games"])
+        self.assertEqual([], status["active_game_pids"])
+        self.assertEqual([], status["capability_issues"])
+        self.assertEqual([], status["discovery_issues"])
+
     def test_start_stop_status_use_single_engine_instance(self):
         created = []
 
@@ -177,7 +198,7 @@ class BridgeLifecycleTests(unittest.TestCase):
             created.append((config_path, scan_game_libraries, engine))
             return engine
 
-        bridge = IsolatorBridge(config_path="config.json", engine_factory=factory)
+        bridge = IsolatorBridge(config_path="config.json", engine_factory=factory, admin_check=lambda: True)
 
         start = bridge.start()
         second_start = bridge.start()
@@ -201,7 +222,7 @@ class BridgeLifecycleTests(unittest.TestCase):
             created.append((config_path, scan_game_libraries, engine))
             return engine
 
-        bridge = IsolatorBridge(config_path="custom.json", engine_factory=factory)
+        bridge = IsolatorBridge(config_path="custom.json", engine_factory=factory, admin_check=lambda: True)
 
         recover = bridge.recover()
         bridge.start()
@@ -212,6 +233,20 @@ class BridgeLifecycleTests(unittest.TestCase):
         self.assertTrue(recover["ok"])
         self.assertEqual(("custom.json", False), created[0][:2])
         self.assertEqual(1, created[0][2].recover_calls)
+
+    def test_privileged_lifecycle_refuses_before_engine_creation(self):
+        created = []
+        bridge = IsolatorBridge(
+            engine_factory=lambda *_args: created.append(FakeEngine()) or created[-1],
+            admin_check=lambda: False,
+        )
+
+        with self.assertRaises(AdministratorRequired):
+            bridge.start()
+        with self.assertRaises(AdministratorRequired):
+            bridge.recover()
+
+        self.assertEqual([], created)
 
     def test_live_snapshot_tracks_connected_clients(self):
         bridge = IsolatorBridge(engine_factory=lambda *_args: FakeEngine())
@@ -228,6 +263,31 @@ class BridgeLifecycleTests(unittest.TestCase):
 
 
 class HttpApiTests(unittest.TestCase):
+    def test_start_and_recover_return_administrator_required_without_creating_engine(self):
+        created = []
+        bridge = IsolatorBridge(
+            engine_factory=lambda *_args: created.append(FakeEngine()) or created[-1],
+            admin_check=lambda: False,
+        )
+        server = create_server(("127.0.0.1", 0), create_handler(bridge, api_token="secret-token"))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        responses = []
+        try:
+            for path in ("/api/start", "/api/recover"):
+                conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+                conn.request("POST", path, headers={"Authorization": "Bearer secret-token"})
+                response = conn.getresponse()
+                responses.append((response.status, json.loads(response.read().decode("utf-8"))))
+                conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual([(403, {"error": "administrator_required"})] * 2, responses)
+        self.assertEqual([], created)
+
     def test_status_endpoint_returns_json_and_dev_cors(self):
         bridge = IsolatorBridge(engine_factory=lambda *_args: FakeEngine())
         server = create_server(("127.0.0.1", 0), create_handler(bridge))
@@ -319,6 +379,37 @@ class HttpApiTests(unittest.TestCase):
         self.assertEqual(0, bridge.live_client_count())
         self.assertNotIn("ConnectionAbortedError", stderr.getvalue())
 
+    def test_lifecycle_post_treats_connection_aborted_as_client_disconnect(self):
+        bridge = IsolatorBridge(
+            engine_factory=lambda *_args: FakeEngine(),
+            admin_check=lambda: True,
+        )
+        handler_class = create_handler(bridge)
+
+        def aborting_send(_handler, _status, _payload):
+            raise ConnectionAbortedError("client closed")
+
+        handler_class._send_json = aborting_send
+        server = create_server(("127.0.0.1", 0), handler_class)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        stderr = io.StringIO()
+        conn = None
+        with contextlib.redirect_stderr(stderr):
+            thread.start()
+            try:
+                conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+                conn.request("POST", "/api/start")
+                with self.assertRaises(http.client.RemoteDisconnected):
+                    conn.getresponse()
+            finally:
+                if conn is not None:
+                    conn.close()
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+        self.assertNotIn("ConnectionAbortedError", stderr.getvalue())
+
     def test_live_stream_uses_cancellable_wait_instead_of_sleep(self):
         source = (ROOT / "server" / "http_api.py").read_text(encoding="utf-8")
 
@@ -385,6 +476,19 @@ class HttpApiTests(unittest.TestCase):
 
         self.assertEqual(2, ctx.exception.code)
         self.assertIn("--api-token", stderr.getvalue())
+
+    def test_standalone_server_refuses_non_elevated_process_before_bridge_or_bind(self):
+        with patch("server.__main__.is_process_elevated", return_value=False), patch(
+            "server.__main__.IsolatorBridge"
+        ) as bridge_cls, patch("server.__main__.create_server") as create_server_mock:
+            with contextlib.redirect_stderr(io.StringIO()) as stderr:
+                with self.assertRaises(SystemExit) as ctx:
+                    server_main(["--port", "0", "--api-token", "secret-token"])
+
+        self.assertEqual(5, ctx.exception.code)
+        self.assertIn("administrator_required", stderr.getvalue())
+        bridge_cls.assert_not_called()
+        create_server_mock.assert_not_called()
 
     def test_malformed_origin_is_rejected_without_crashing(self):
         bridge = IsolatorBridge(engine_factory=lambda *_args: FakeEngine())

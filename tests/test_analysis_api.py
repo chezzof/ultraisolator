@@ -7,6 +7,7 @@ from pathlib import Path
 
 from server.bridge import IsolatorBridge
 from server.http_api import create_handler, create_server
+from server.analysis import build_analysis_payload
 
 
 class FakeAnalysisEngine:
@@ -26,6 +27,41 @@ class FakeAnalysisEngine:
 
 
 class AnalysisApiTests(unittest.TestCase):
+    def test_capability_score_uses_structured_severity_with_legacy_fallback(self):
+        cases = [
+            (
+                {
+                    "capability_issues": [{
+                        "code": "epic_auto_detection_enabled",
+                        "severity": "info",
+                        "data": {},
+                        "message": "Epic Games auto-detection enabled.",
+                    }],
+                    "capability_notes": ["Epic Games auto-detection enabled."],
+                },
+                "ok",
+            ),
+            (
+                {
+                    "capability_issues": [{
+                        "code": "ifeo_write_denied",
+                        "severity": "error",
+                        "data": {},
+                        "message": "Access denied.",
+                    }],
+                    "capability_notes": [],
+                },
+                "warning",
+            ),
+            ({"capability_issues": [], "capability_notes": ["Legacy warning."]}, "warning"),
+        ]
+
+        for status, expected in cases:
+            with self.subTest(expected=expected, status=status):
+                payload = build_analysis_payload(status, {}, {})
+                check = next(item for item in payload["checks"] if item["id"] == "capability_notes")
+                self.assertEqual(expected, check["status"])
+
     def _request_json(self, server, path):
         conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
         try:
@@ -114,7 +150,8 @@ class AnalysisApiTests(unittest.TestCase):
         self.assertEqual("excellent", payload["grade"])
         self.assertIn("start ready", payload["summary"].lower())
         self.assertIn("CPU isolation", payload["categories"])
-        self.assertFalse(payload["bottleneck"]["available"])  # no GPU reads in MVP
+        self.assertNotIn("boost_potential", payload)
+        self.assertNotIn("bottleneck", payload)
         self.assertEqual(0, payload["analysis_calls"]["topology_refreshes"])
         self.assertTrue(any(check["id"] == "admin" and check["status"] == "ok" for check in payload["checks"]))
         self.assertTrue(any(check["id"] == "cpu_topology" and check["status"] == "ok" for check in payload["checks"]))

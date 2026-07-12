@@ -7,6 +7,7 @@ from pathlib import Path
 
 from server.bridge import IsolatorBridge
 from server.http_api import create_handler, create_server
+from server.readiness import build_readiness_payload
 
 
 class FakeReadinessEngine:
@@ -26,6 +27,41 @@ class FakeReadinessEngine:
 
 
 class ReadinessApiTests(unittest.TestCase):
+    def test_capability_check_uses_structured_severity_with_legacy_fallback(self):
+        cases = [
+            (
+                {
+                    "capability_issues": [{
+                        "code": "steam_auto_detection_enabled",
+                        "severity": "info",
+                        "data": {},
+                        "message": "Steam auto-detection enabled.",
+                    }],
+                    "capability_notes": ["Steam auto-detection enabled."],
+                },
+                "ok",
+            ),
+            (
+                {
+                    "capability_issues": [{
+                        "code": "cpu_topology_unavailable",
+                        "severity": "warning",
+                        "data": {},
+                        "message": "CPU topology is unavailable.",
+                    }],
+                    "capability_notes": [],
+                },
+                "warning",
+            ),
+            ({"capability_issues": [], "capability_notes": ["Legacy warning."]}, "warning"),
+        ]
+
+        for status, expected in cases:
+            with self.subTest(expected=expected, status=status):
+                payload = build_readiness_payload(status, {}, {})
+                check = next(item for item in payload["checks"] if item["id"] == "capability_notes")
+                self.assertEqual(expected, check["status"])
+
     def _request_json(self, server, path):
         conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=2)
         try:

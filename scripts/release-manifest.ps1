@@ -7,8 +7,7 @@ $Dist = Join-Path $Root "ui/dist-packaged"
 $UiPackage = Get-Content -LiteralPath "ui/package.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 $ReleaseVersion = $UiPackage.version
 $Artifacts = @(
-  "Esports Isolator PRO Setup $ReleaseVersion.exe",
-  "Esports-Isolator-PRO-$ReleaseVersion-portable.exe"
+  "Esports Isolator PRO Setup $ReleaseVersion.exe"
 )
 
 if (-not (Test-Path -LiteralPath $Dist)) {

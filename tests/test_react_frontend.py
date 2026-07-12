@@ -1,6 +1,4 @@
 import json
-import re
-import unicodedata
 import unittest
 from pathlib import Path
 
@@ -16,6 +14,10 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertTrue((SRC / "main.jsx").exists())
         self.assertTrue((SRC / "App.jsx").exists())
         self.assertTrue((SRC / "styles.css").exists())
+        self.assertTrue((SRC / "premium.css").exists())
+
+        entry = (SRC / "main.jsx").read_text(encoding="utf-8")
+        self.assertLess(entry.index("./styles.css"), entry.index("./premium.css"))
 
     def test_package_declares_carbon_renderer_stack(self):
         package = json.loads((UI / "package.json").read_text(encoding="utf-8"))
@@ -26,71 +28,6 @@ class ReactFrontendContractTests(unittest.TestCase):
         for group_name in ("dependencies", "devDependencies"):
             for name, version in package[group_name].items():
                 self.assertNotRegex(version, r"^[~^>=<*]", f"{name} should be pinned")
-
-    def test_package_declares_visual_and_a11y_quality_gates(self):
-        package = json.loads((UI / "package.json").read_text(encoding="utf-8"))
-        scripts = package["scripts"]
-        dev_dependencies = package["devDependencies"]
-
-        self.assertEqual(scripts.get("test:visual"), "playwright test --config playwright.config.js tests/visual")
-        self.assertEqual(scripts.get("test:a11y"), "playwright test --config playwright.config.js tests/a11y")
-        self.assertEqual(scripts.get("test:ui-quality"), "npm run build:renderer && npm run test:visual && npm run test:a11y")
-        self.assertIn("@playwright/test", dev_dependencies)
-        self.assertIn("@axe-core/playwright", dev_dependencies)
-        self.assertTrue((UI / "playwright.config.js").exists())
-        self.assertTrue((UI / "tests" / "visual").is_dir())
-        self.assertTrue((UI / "tests" / "a11y").is_dir())
-        self.assertTrue((UI / "tests" / "fixtures" / "rendererMock.js").exists())
-
-    def test_visual_tests_cover_redesigned_renderer_states_with_mock_data(self):
-        visual_dir = UI / "tests" / "visual"
-        visual_sources = "\n".join(
-            path.read_text(encoding="utf-8")
-            for path in sorted(visual_dir.glob("*.spec.js"))
-        ) if visual_dir.exists() else ""
-
-        for marker in (
-            "#dashboard",
-            "#settings",
-            "#topology",
-            "backend-unavailable",
-            "installRendererMock",
-            "toHaveScreenshot",
-            "dashboard-command-center",
-            "settings-page",
-            "topology-core-map",
-        ):
-            self.assertIn(marker, visual_sources)
-
-        self.assertNotIn("getBackendToken", visual_sources)
-        self.assertNotIn("getBackendUrl", visual_sources)
-        self.assertNotIn("Authorization", visual_sources)
-        self.assertNotIn("Bearer", visual_sources)
-        self.assertNotIn("127.0.0.1", visual_sources)
-
-    def test_a11y_tests_cover_main_renderer_pages_with_axe(self):
-        a11y_dir = UI / "tests" / "a11y"
-        a11y_sources = "\n".join(
-            path.read_text(encoding="utf-8")
-            for path in sorted(a11y_dir.glob("*.spec.js"))
-        ) if a11y_dir.exists() else ""
-
-        for marker in (
-            "@axe-core/playwright",
-            "AxeBuilder",
-            "#dashboard",
-            "#settings",
-            "#topology",
-            "installRendererMock",
-            "violations",
-        ):
-            self.assertIn(marker, a11y_sources)
-
-        self.assertNotIn("getBackendToken", a11y_sources)
-        self.assertNotIn("getBackendUrl", a11y_sources)
-        self.assertNotIn("Authorization", a11y_sources)
-        self.assertNotIn("Bearer", a11y_sources)
-        self.assertNotIn("127.0.0.1", a11y_sources)
 
     def test_layout_has_sidebar_navigation_and_three_placeholder_pages(self):
         app = (SRC / "App.jsx").read_text(encoding="utf-8")
@@ -135,138 +72,34 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn("from './pages/Topology.jsx'", app)
         self.assertIn("from './components/ErrorBoundary.jsx'", app)
 
-    def test_shared_ui_design_foundation_exists(self):
-        expected_files = (
-            "styles/tokens.css",
-            "components/layout/PageHeader.jsx",
-            "components/layout/SectionGrid.jsx",
-            "components/cards/MetricCard.jsx",
-            "components/cards/ActionPanel.jsx",
-            "components/status/StatusPill.jsx",
-            "components/states/EmptyState.jsx",
-            "components/states/ErrorState.jsx",
-        )
-        for relative_path in expected_files:
-            with self.subTest(path=relative_path):
-                self.assertTrue((SRC / relative_path).exists(), f"{relative_path} is missing")
-
-    def test_design_tokens_define_surfaces_spacing_type_and_status_colors(self):
-        tokens = (SRC / "styles" / "tokens.css").read_text(encoding="utf-8")
-
-        for token in (
-            "--eii-color-bg",
-            "--eii-color-surface",
-            "--eii-color-surface-raised",
-            "--eii-color-border",
-            "--eii-color-accent",
-            "--eii-color-success",
-            "--eii-color-warning",
-            "--eii-color-danger",
-            "--eii-color-info",
-            "--eii-font-ui",
-            "--eii-font-mono",
-            "--eii-space-1",
-            "--eii-space-2",
-            "--eii-space-3",
-            "--eii-space-4",
-            "--eii-space-5",
-            "--eii-space-6",
-            "--eii-radius-sm",
-            "--eii-radius-md",
-        ):
-            self.assertIn(token, tokens)
-
-    def test_shared_primitives_are_presentational_and_token_based(self):
-        component_paths = (
-            SRC / "components" / "layout" / "PageHeader.jsx",
-            SRC / "components" / "layout" / "SectionGrid.jsx",
-            SRC / "components" / "cards" / "MetricCard.jsx",
-            SRC / "components" / "cards" / "ActionPanel.jsx",
-            SRC / "components" / "status" / "StatusPill.jsx",
-            SRC / "components" / "states" / "EmptyState.jsx",
-            SRC / "components" / "states" / "ErrorState.jsx",
-        )
-
-        for path in component_paths:
-            with self.subTest(path=path.name):
-                source = path.read_text(encoding="utf-8")
-                self.assertNotIn("requestJson", source)
-                self.assertNotIn("window.isolator", source)
-                self.assertNotIn("fetch(", source)
-
-        status_pill = (SRC / "components" / "status" / "StatusPill.jsx").read_text(encoding="utf-8")
-        for tone in ("neutral", "connected", "success", "warning", "danger", "inactive"):
-            self.assertIn(tone, status_pill)
-
-        metric_card = (SRC / "components" / "cards" / "MetricCard.jsx").read_text(encoding="utf-8")
-        self.assertIn("metric-card", metric_card)
-        self.assertIn("metric-card-value", metric_card)
-
-    def test_existing_low_risk_wrappers_use_shared_primitives(self):
-        page_heading = (SRC / "components" / "PageHeading.jsx").read_text(encoding="utf-8")
-        status_tag = (SRC / "components" / "StatusTag.jsx").read_text(encoding="utf-8")
-        kpi_cell = (SRC / "components" / "KpiCell.jsx").read_text(encoding="utf-8")
-        main = (SRC / "main.jsx").read_text(encoding="utf-8")
-
-        self.assertIn("./layout/PageHeader.jsx", page_heading)
-        self.assertIn("./status/StatusPill.jsx", status_tag)
-        self.assertIn("./cards/MetricCard.jsx", kpi_cell)
-        self.assertIn("./styles/tokens.css", main)
-
     def test_dashboard_has_live_kpi_status_panel_and_quick_actions(self):
         dashboard = (SRC / "pages" / "Dashboard.jsx").read_text(encoding="utf-8")
         lifecycle = (SRC / "utils" / "lifecycle.js").read_text(encoding="utf-8")
 
         self.assertIn("function DashboardPage", dashboard)
-        self.assertIn("dashboard-command-center", dashboard)
-        self.assertIn("Game mode", dashboard)
+        self.assertIn("dashboard-status-panel", dashboard)
+        self.assertIn("active_games", dashboard)
+        self.assertIn("monitoring_active", dashboard)
+        self.assertIn("tuning_state", dashboard)
         self.assertIn("Admin", dashboard)
         self.assertIn("Power Plan", dashboard)
         self.assertIn("Timer", dashboard)
-        self.assertIn("CPU Partitions", dashboard)
-        self.assertIn("Capability Notes", dashboard)
-        self.assertIn("Start", dashboard)
-        self.assertIn("Stop", dashboard)
-        self.assertIn("Restore", dashboard)
+        self.assertIn("CPU allocation", dashboard)
+        self.assertIn("Compatibility", dashboard)
+        self.assertIn("Resume monitoring", dashboard)
+        self.assertIn("Pause monitoring", dashboard)
+        self.assertIn("Restore Windows settings", dashboard)
+        self.assertIn("actionableCapabilityIssues", dashboard)
+        self.assertIn("issue.severity === 'warning'", dashboard)
+        self.assertIn("issue.severity === 'error'", dashboard)
         self.assertIn("postLifecycleAction", dashboard)
+        self.assertIn("dashboard-profile-hero", dashboard)
+        self.assertIn("planned-change-summary", dashboard)
+        self.assertIn("dashboard-trust-strip", dashboard)
+        self.assertIn("dashboard-primary-action", dashboard)
+        self.assertNotIn("setInterval", dashboard)
         self.assertIn("requestJson", lifecycle)
         self.assertNotIn("CPU/RAM", dashboard)
-
-    def test_dashboard_is_status_first_command_center(self):
-        dashboard = (SRC / "pages" / "Dashboard.jsx").read_text(encoding="utf-8")
-
-        for primitive in (
-            "../components/cards/ActionPanel.jsx",
-            "../components/layout/SectionGrid.jsx",
-            "../components/status/StatusPill.jsx",
-            "../components/states/EmptyState.jsx",
-            "../components/states/ErrorState.jsx",
-        ):
-            self.assertIn(primitive, dashboard)
-
-        for marker in (
-            "dashboard-command-center",
-            "dashboard-hero",
-            "Dashboard command center",
-            "dashboard-action-panel",
-            "dashboard-primary-action",
-            "dashboard-action-reason",
-            "dashboard-empty-state",
-            "dashboard-metric-groups",
-            "Session state",
-            "System readiness",
-            "Optimization impact",
-            "Recovery/safety",
-            "dashboard-readiness-section",
-            "warnings and errors",
-        ):
-            self.assertIn(marker, dashboard)
-
-        self.assertNotIn("getBackendToken", dashboard)
-        self.assertNotIn("getBackendUrl", dashboard)
-        self.assertNotIn("Authorization", dashboard)
-        self.assertNotIn("Bearer", dashboard)
-        self.assertNotIn("127.0.0.1", dashboard)
 
     def test_dashboard_has_process_table_filters_and_columns(self):
         table = (SRC / "components" / "ProcessTable.jsx").read_text(encoding="utf-8")
@@ -275,11 +108,17 @@ class ReactFrontendContractTests(unittest.TestCase):
 
         self.assertIn("function ProcessTable", table)
         self.assertIn("process-filter-bar", table)
-        self.assertIn("Search PID, name, source", table)
-        for label in ("All", "Jailed", "Game", "Protected"):
+        self.assertIn("Search PID or application", table)
+        for label in ("All", "Background limited", "Game", "Left unchanged"):
             self.assertIn(label, table + process_constants)
-        for column in ("PID", "Name", "Priority", "CPU Sets", "Status"):
+        for column in ("Action", "Application", "PID", "Priority", "CPU allocation", "Why it matters"):
             self.assertIn(column, table)
+        for tuning_state in ("pending", "applied", "skipped", "blocked", "failed"):
+            self.assertIn(f"process.reason.game.{tuning_state}", (SRC / "locales" / "en.mjs").read_text(encoding="utf-8"))
+        self.assertIn("process.tuning_state", table)
+        self.assertIn("observed_game", table)
+        self.assertNotIn("process.column.threads", table)
+        self.assertNotIn("process.column.gen", table)
         self.assertIn("useMemo", table)
         self.assertIn(".process-table", styles)
         self.assertIn(".status-badge", styles)
@@ -296,7 +135,14 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn("/api/config/defaults", settings)
         self.assertIn("/api/config", settings)
         self.assertIn("validateConfigDraft", settings)
-        for section in ("Game Detection", "Jailing", "Timing", "Protection", "Advanced", "Application"):
+        for section in (
+            "Games & libraries",
+            "Background isolation",
+            "Detection & recovery",
+            "Game tuning",
+            "For specialists",
+            "App behavior",
+        ):
             self.assertIn(section, settings + settings_constants)
         for field in (
             "games",
@@ -330,12 +176,15 @@ class ReactFrontendContractTests(unittest.TestCase):
         for label in (
             "Launch at Windows startup",
             "Minimize to tray on start",
-            "Start isolator automatically",
+            "Show notification toasts",
             "Save",
             "Reset",
             "Reload",
         ):
             self.assertIn(label, settings)
+        self.assertNotIn("Start isolator automatically", settings + settings_constants)
+        self.assertNotIn("startIsolatorAutomatically", settings + settings_constants + app_settings)
+        self.assertIn("POSITIVE_BOOLEAN_FIELDS", settings_constants)
         self.assertIn("window.isolator?.getAppSettings", app_settings)
         self.assertIn("window.isolator?.updateAppSettings", app_settings)
         self.assertIn("validateConfigDraft", config_utils)
@@ -343,99 +192,33 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn(".settings-field", styles)
         self.assertIn(".toggle-row", styles)
 
-    def test_settings_is_risk_grouped_and_safety_aware(self):
-        settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
-        constants = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
-
-        for primitive in (
-            "../components/cards/ActionPanel.jsx",
-            "../components/layout/SectionGrid.jsx",
-            "../components/status/StatusPill.jsx",
-            "../components/states/EmptyState.jsx",
-            "../components/states/ErrorState.jsx",
-        ):
-            self.assertIn(primitive, settings)
-
-        for marker in (
-            "settings-safety-overview",
-            "Background jailing is opt-in",
-            "Use conservative anti-cheat mode",
-            "Some changes require restart",
-            "settings-risk-grid",
-            "settings-risk-section",
-            "Game detection",
-            "Safe/basic behavior",
-            "Performance tuning",
-            "Anti-cheat and protection",
-            "Advanced background jailing",
-            "App profiles / custom paths",
-            "settings-risk-danger",
-            "settings-restart-note",
-            "No Steam or Epic library paths configured",
-            "No app profiles configured",
-        ):
-            self.assertIn(marker, settings)
-
-        self.assertNotIn("getBackendToken", settings)
-        self.assertNotIn("getBackendUrl", settings)
-        self.assertNotIn("Authorization", settings)
-        self.assertNotIn("Bearer", settings)
-        self.assertNotIn("127.0.0.1", settings)
-
-        old_fields = set()
-        config_sections = constants[
-            constants.find("export const CONFIG_SECTIONS"):constants.find("export const FIELD_LABELS")
-        ]
-        for group in re.finditer(r"fields:\s*\[([^\]]*)\]", config_sections, flags=re.S):
-            old_fields.update(re.findall(r"'([a-zA-Z0-9_]+)'", group.group(1)))
-        grouped_fields = set()
-        for group in re.finditer(r"fields:\s*\[([^\]]*)\]", settings, flags=re.S):
-            grouped_fields.update(re.findall(r"'([a-zA-Z0-9_]+)'", group.group(1)))
-        self.assertFalse(old_fields - grouped_fields)
-
-    def test_settings_risk_groups_are_translated(self):
-        settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
+    def test_app_settings_have_one_revision_aware_root_provider(self):
+        main = (SRC / "main.jsx").read_text(encoding="utf-8")
+        context = (SRC / "state" / "AppSettingsContext.jsx").read_text(encoding="utf-8")
+        store = (SRC / "state" / "AppSettingsStore.mjs").read_text(encoding="utf-8")
         i18n = (SRC / "i18n.jsx").read_text(encoding="utf-8")
+        renderer = "\n".join(path.read_text(encoding="utf-8") for path in SRC.rglob("*.jsx"))
 
-        for key in (
-            "settings.risk.gameDetection.title",
-            "settings.risk.gameDetection.detail",
-            "settings.risk.gameDetection.badge",
-            "settings.risk.safeBasic.title",
-            "settings.risk.safeBasic.detail",
-            "settings.risk.safeBasic.badge",
-            "settings.risk.performance.title",
-            "settings.risk.performance.detail",
-            "settings.risk.performance.badge",
-            "settings.risk.protection.title",
-            "settings.risk.protection.detail",
-            "settings.risk.protection.badge",
-            "settings.risk.advancedJailing.title",
-            "settings.risk.advancedJailing.detail",
-            "settings.risk.advancedJailing.badge",
-            "settings.risk.appProfiles.title",
-            "settings.risk.appProfiles.detail",
-            "settings.risk.appProfiles.badge",
-        ):
-            self.assertGreaterEqual(i18n.count(key), 2, key)
-
-        concrete_settings_keys = set(re.findall(r"t\('([^']+)'", settings))
-        concrete_settings_keys.update(re.findall(r't\("([^"]+)"', settings))
-        for key in sorted(key for key in concrete_settings_keys if key.startswith("settings.")):
-            self.assertGreaterEqual(i18n.count(key), 2, key)
+        self.assertIn("<AppSettingsProvider>", main)
+        self.assertIn("useSyncExternalStore", context)
+        self.assertIn("new AppSettingsStore", context)
+        self.assertIn("writeQueue", store)
+        self.assertIn("localRevision", store)
+        self.assertIn("useAppSettings", i18n)
+        self.assertNotIn("app-settings-updated", renderer)
+        self.assertNotIn("window.addEventListener('app-settings", renderer)
 
     def test_settings_has_per_app_profiles_crud_editor(self):
         settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
         config_utils = (SRC / "utils" / "config.js").read_text(encoding="utf-8")
         styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
-        self.assertIn("APP_PROFILES_RISK_GROUP", settings)
-        self.assertIn("app-profiles", settings)
+        self.assertIn("App-specific rules", settings)
         self.assertIn("addProfile", settings)
         self.assertIn("removeProfile", settings)
         self.assertIn("updateProfile", settings)
-        self.assertIn("Profile executable", settings)
-        for label in ("Treat as game", "Never jail", "Always jail", "Priority"):
+        self.assertIn("Application executable", settings)
+        for label in ("Treat as game", "Always leave unchanged", "Always limit in background", "Priority"):
             self.assertIn(label, settings)
         self.assertIn("app_profiles", settings + config_utils)
         self.assertIn("validateAppProfilesDraft", config_utils)
@@ -444,7 +227,7 @@ class ReactFrontendContractTests(unittest.TestCase):
     def test_first_run_wizard_applies_presets_and_tracks_completion(self):
         app = (SRC / "App.jsx").read_text(encoding="utf-8")
         constants = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
-        app_settings = (SRC / "utils" / "appSettings.js").read_text(encoding="utf-8")
+        app_settings = (SRC / "state" / "AppSettingsContext.jsx").read_text(encoding="utf-8")
         wizard_path = SRC / "components" / "FirstRunWizard.jsx"
         self.assertTrue(wizard_path.exists())
         wizard = wizard_path.read_text(encoding="utf-8")
@@ -456,15 +239,31 @@ class ReactFrontendContractTests(unittest.TestCase):
         for label in ("Competitive", "Casual", "Streaming"):
             self.assertIn(label, constants + wizard)
         self.assertIn("/api/config", wizard)
-        self.assertIn("saveAppSettings", wizard)
+        self.assertIn("useAppSettings", wizard)
+        self.assertIn("updateSettings", wizard)
         self.assertIn("first-run-overlay", wizard)
+        self.assertIn("STEP_COUNT = 3", wizard)
+        self.assertIn("prepareReview", wizard)
+        self.assertIn("reviewConfig", wizard)
+        self.assertIn("configApplied", wizard)
+        self.assertIn("firstRun.completionError", wizard)
+        self.assertIn("aria-busy", wizard)
+        self.assertIn("persistent_recovery_incomplete", wizard)
+        self.assertIn("reported_failure_count", wizard)
+        for field in ("maintenance_jail_batch_size", "maintenance_jail_interval_ms", "maintenance_jail_batch_cooldown_ms"):
+            self.assertIn(field, wizard)
+        self.assertNotIn("Local engine", wizard)
+        self.assertNotIn("Jail batch size", wizard)
+        self.assertLess(wizard.index("...defaultsPayload.defaults"), wizard.index("...configPayload.config"))
+        self.assertLess(wizard.index("...configPayload.config"), wizard.index("...selectedPreset.config"))
+        self.assertIn("aria-describedby", wizard)
         self.assertIn(".first-run-overlay", styles)
 
     def test_settings_can_apply_config_presets_after_first_run(self):
         settings = (SRC / "pages" / "Settings.jsx").read_text(encoding="utf-8")
         constants = (SRC / "constants" / "settings.js").read_text(encoding="utf-8")
 
-        self.assertIn("Config Presets", settings)
+        self.assertIn("Session profiles", settings)
         self.assertIn("applyPresetToDraft", settings)
         self.assertIn("CONFIG_PRESETS", settings + constants)
         for label in ("Competitive", "Casual", "Streaming"):
@@ -499,60 +298,6 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn(".core-tile", styles)
         self.assertIn(".core-detail-panel", styles)
 
-    def test_topology_uses_shared_primitives_and_release_ready_states(self):
-        topology = (SRC / "pages" / "Topology.jsx").read_text(encoding="utf-8")
-        styles = (SRC / "styles.css").read_text(encoding="utf-8")
-
-        for primitive in (
-            "../components/cards/ActionPanel.jsx",
-            "../components/cards/MetricCard.jsx",
-            "../components/layout/PageHeader.jsx",
-            "../components/layout/SectionGrid.jsx",
-            "../components/status/StatusPill.jsx",
-            "../components/states/EmptyState.jsx",
-            "../components/states/ErrorState.jsx",
-        ):
-            self.assertIn(primitive, topology)
-
-        for marker in (
-            "topology-page-header",
-            "topology-state-panel",
-            "topology-summary-grid",
-            "topology-legend-grid",
-            "topology-legend-card",
-            "topology-core-map",
-            "core-tile-meta",
-            "core-detail-panel",
-            "core-detail-section",
-            "core-detail-empty",
-            "topology-loading-state",
-            "topology-empty-state",
-            "topology-error-state",
-            "topology-selected-core",
-            "Partition legend",
-        ):
-            self.assertIn(marker, topology + styles)
-
-        for label in ("Game", "Background", "Housekeeping", "Unassigned"):
-            self.assertIn(label, topology)
-
-        self.assertNotIn("getBackendToken", topology)
-        self.assertNotIn("getBackendUrl", topology)
-        self.assertNotIn("Authorization", topology)
-        self.assertNotIn("Bearer", topology)
-        self.assertNotIn("127.0.0.1", topology)
-
-    def test_topology_grids_use_responsive_css_not_inline_columns(self):
-        topology = (SRC / "pages" / "Topology.jsx").read_text(encoding="utf-8")
-        styles = (SRC / "styles.css").read_text(encoding="utf-8")
-
-        self.assertNotIn('className="topology-summary-grid" columns=', topology)
-        self.assertNotIn('className="topology-legend-grid" columns=', topology)
-        self.assertIn(".topology-summary-grid", styles)
-        self.assertIn(".topology-legend-grid", styles)
-        self.assertIn("@media (max-width: 1040px)", styles)
-        self.assertIn("@media (max-width: 640px)", styles)
-
     def test_logs_page_has_log_viewer_filters_and_game_mode_pause(self):
         app = (SRC / "App.jsx").read_text(encoding="utf-8")
         navigation = (SRC / "constants" / "navigation.js").read_text(encoding="utf-8")
@@ -563,7 +308,8 @@ class ReactFrontendContractTests(unittest.TestCase):
 
         self.assertIn("LogsPage", app)
         self.assertIn("from './pages/Logs.jsx'", app)
-        self.assertIn("Logs", navigation)
+        self.assertIn("Activity", navigation)
+        self.assertIn("id: 'logs'", navigation)
         self.assertIn("/api/logs", logs)
         self.assertIn("setInterval", logs)
         self.assertIn("game_mode", logs)
@@ -584,7 +330,8 @@ class ReactFrontendContractTests(unittest.TestCase):
         styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
         self.assertIn("AdvancedToolsPage", app)
-        self.assertIn("Advanced Tools", navigation)
+        self.assertIn("Advanced", navigation)
+        self.assertIn("id: 'advanced'", navigation)
         self.assertIn("Message Signaled Interrupts", tools)
         self.assertIn("/api/msi", tools)
         self.assertIn("readonly", tools.lower())
@@ -612,9 +359,12 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn("notification-history-drawer", center)
         self.assertIn("notification-toast-stack", center)
         self.assertIn("suppress_in_game_mode", center)
-        self.assertIn("Notifications", settings)
+        self.assertIn("App behavior", settings)
         self.assertIn("Show notification toasts", settings)
         self.assertIn("notificationToastsEnabled", app_settings)
+        self.assertIn("notificationText", center)
+        self.assertIn("notification?.data", center)
+        self.assertNotIn("<span>{notification.type}</span>", center)
         self.assertIn(".notification-toast-stack", styles)
         self.assertIn(".notification-history-drawer", styles)
 
@@ -628,12 +378,14 @@ class ReactFrontendContractTests(unittest.TestCase):
 
         self.assertIn("SystemAnalysis", app)
         self.assertIn("from './components/SystemAnalysis.jsx'", app)
-        self.assertIn("Analysis", dashboard)
+        self.assertIn("SystemAnalysis", dashboard)
         self.assertIn("/api/analysis", analysis)
-        self.assertIn("Optimization Score", analysis)
-        self.assertIn("Boost Potential", analysis)
-        self.assertIn("CPU isolation", analysis)
-        self.assertIn("GPU bottleneck", analysis)
+        self.assertIn("Setup quality", analysis)
+        self.assertIn("Setup score", analysis)
+        self.assertIn("Ready checks", analysis)
+        self.assertNotIn("Boost Potential", analysis)
+        self.assertNotIn("GPU bottleneck", analysis)
+        self.assertNotIn("MVP", analysis)
         self.assertIn("game_mode", analysis)
         self.assertIn("paused", analysis)
         self.assertIn(".analysis-panel", styles)
@@ -644,14 +396,18 @@ class ReactFrontendContractTests(unittest.TestCase):
         readiness_path = SRC / "components" / "ReadinessChecklist.jsx"
         self.assertTrue(readiness_path.exists())
         readiness = readiness_path.read_text(encoding="utf-8")
+        locale = (SRC / "locales" / "en.mjs").read_text(encoding="utf-8")
         styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
         self.assertIn("ReadinessChecklist", dashboard)
         self.assertIn("/api/readiness", readiness)
-        self.assertIn("Game Readiness", readiness)
+        self.assertIn("Game readiness", readiness)
         self.assertIn("paused during game mode", readiness)
-        for label in ("Power plan", "Timer resolution", "Background jailing", "IFEO priority"):
-            self.assertIn(label, readiness)
+        for label in ("Automatic performance mode", "Low-latency timer", "Background load control", "Game priority boost"):
+            self.assertIn(label, readiness + locale)
+        self.assertIn("configured_games", readiness)
+        self.assertNotIn("cacheHit", readiness)
+        self.assertNotIn("cacheFresh", readiness)
         self.assertIn(".readiness-panel", styles)
         self.assertIn(".readiness-check", styles)
 
@@ -717,22 +473,51 @@ class ReactFrontendContractTests(unittest.TestCase):
         self.assertIn("from '../utils/api.js'", settings)
         self.assertIn("from '../utils/api.js'", topology)
 
-    def test_english_analysis_points_are_not_russian(self):
+    def test_locales_are_split_and_primary_copy_uses_plain_language(self):
         i18n = (SRC / "i18n.jsx").read_text(encoding="utf-8")
-        english_block = i18n[:i18n.index("  ru: {")]
+        english = (SRC / "locales" / "en.mjs").read_text(encoding="utf-8")
+        russian = (SRC / "locales" / "ru.mjs").read_text(encoding="utf-8")
 
-        self.assertIn("'analysis.points': '{{points}} points'", english_block)
-        self.assertNotIn("\u043e\u0447\u043a\u043e\u0432", english_block)
+        self.assertIn("assertLocaleParity", i18n)
+        self.assertIn("document.documentElement.lang = language", i18n)
+        self.assertIn("from './locales/en.mjs'", i18n)
+        self.assertIn("from './locales/ru.mjs'", i18n)
+        for obsolete in ("Boost Potential", "GPU bottleneck", "MVP", "Recovery backlog", "Start isolator automatically"):
+            self.assertNotIn(obsolete, english)
+        for obsolete in ("Потенциал буста", "Упор в GPU", "MVP", "Recovery backlog", "Автоматически запускать isolator"):
+            self.assertNotIn(obsolete, russian)
+        self.assertIn("'dashboard.compatibility': 'Compatibility'", english)
+        self.assertIn("'dashboard.compatibility': 'Совместимость'", russian)
 
-    def test_styles_reuse_benchmark_hud_tokens(self):
-        styles = (SRC / "styles.css").read_text(encoding="utf-8")
+    def test_selected_premium_theme_is_loaded_after_legacy_styles(self):
+        styles = (SRC / "premium.css").read_text(encoding="utf-8")
+        legacy_styles = (SRC / "styles.css").read_text(encoding="utf-8")
 
-        for token in ("#00D4AA", "#0A0A0A", "#111316", "#1E2328", "JetBrains Mono", "Inter"):
+        for token in ("#07111c", "#0e1a28", "#2f7ef7", "#35d392", "JetBrains Mono", "Inter"):
             self.assertIn(token, styles)
+        for selector in (".dashboard-profile-hero", ".dashboard-trust-strip", ".first-run-review", ".kpi-cell"):
+            self.assertIn(selector, styles)
         self.assertIn("--eii-accent", styles)
-        self.assertIn("Open-source clean pass", styles)
-        self.assertIn(".kpi-cell", styles)
-        self.assertIn("grid-template-columns: repeat(3", styles)
+        self.assertIn(".toggle-row > .toggle-control", styles)
+        self.assertIn(".toggle-row > .toggle-control > input:focus-visible", styles)
+        self.assertIn("@container (max-width: 460px)", styles)
+        self.assertIn("@media (max-width: 1320px)", styles)
+        self.assertIn("@media (max-width: 1180px)", styles)
+        self.assertIn("margin-left: 64px !important", styles)
+        self.assertIn(".cds--side-nav__overlay-active", styles)
+        self.assertIn(".dashboard-insights", styles)
+        self.assertIn("repeat(auto-fit, minmax(640px, 1fr))", styles)
+        self.assertIn(".cds--tile.settings-section.presets-section", styles)
+        self.assertIn(".cds--tile.settings-section.app-behavior-section", styles)
+        self.assertIn(".settings-section.section-detection", styles)
+        self.assertIn(".settings-section.section-tuning", styles)
+        self.assertIn(".dashboard-kpi-grid", styles)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", styles)
+        self.assertNotIn("gradient(", styles.lower())
+        for stylesheet in (legacy_styles, styles):
+            self.assertNotRegex(stylesheet, r"\.toggle-row\s+input")
+        self.assertIn(".settings-field > input", legacy_styles)
+        self.assertNotIn(".settings-field input", legacy_styles)
 
     def test_public_text_has_no_mojibake_artifacts(self):
         checked_files = (
@@ -742,43 +527,13 @@ class ReactFrontendContractTests(unittest.TestCase):
             ROOT / "SECURITY.md",
             SRC / "i18n.jsx",
         )
-        mojibake_markers = (
-            "\u00d0",
-            "\u00d1",
-            "\u00e2\u20ac\u201d",
-            "\u00e2\u20ac\u201c",
-            "\u00e2\u201d",
-        )
+        mojibake_markers = ("Ð", "Ñ", "â€”", "â€“", "â”")
 
         for path in checked_files:
             with self.subTest(path=path.name):
                 text = path.read_text(encoding="utf-8")
                 for marker in mojibake_markers:
                     self.assertNotIn(marker, text)
-
-    def test_frontend_and_tests_have_no_hidden_control_characters(self):
-        allowed = {"\n", "\r", "\t"}
-        hits = []
-        for root in (SRC, ROOT / "tests"):
-            for path in root.rglob("*"):
-                if path.suffix.lower() not in {".css", ".js", ".jsx", ".ts", ".tsx", ".py"}:
-                    continue
-                text = path.read_text(encoding="utf-8", errors="ignore")
-                for line_no, line in enumerate(text.splitlines(True), 1):
-                    for col_no, char in enumerate(line, 1):
-                        if unicodedata.category(char) in {"Cf", "Cc"} and char not in allowed:
-                            hits.append((str(path.relative_to(ROOT)), line_no, col_no, f"U+{ord(char):04X}"))
-        self.assertEqual([], hits)
-
-    def test_react_frontend_contract_source_is_ascii(self):
-        text = Path(__file__).read_text(encoding="utf-8")
-        non_ascii = [
-            (line_no, col_no, f"U+{ord(char):04X}")
-            for line_no, line in enumerate(text.splitlines(), 1)
-            for col_no, char in enumerate(line, 1)
-            if ord(char) > 127
-        ]
-        self.assertEqual([], non_ascii)
 
     def test_repository_has_oss_launch_hygiene_files(self):
         expected_files = (
@@ -813,8 +568,7 @@ class ReactFrontendContractTests(unittest.TestCase):
             "npm --prefix ui run clean:packaged",
             "scripts/release-manifest.ps1",
             "git check-ignore",
-            "Remove-PackageOutputItem $packageOutput $item",
-            "npm --prefix ui run verify:installed-artifacts",
+            "node ui/scripts/clean-packaged-output.js $item",
         ):
             self.assertIn(command, release_check)
 

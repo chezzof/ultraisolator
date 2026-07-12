@@ -8,14 +8,17 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const {
   appendBackendStartupLog,
+  assertProcessElevated,
   backendConfigPath,
   backendManifestPath,
   backendRoot,
   closeBackendLogStream,
   createBackendLogStream,
+  isWindowsStartupTaskEnabled,
   preflightPythonRuntime,
   resolvePackagedPythonCommand,
   resolvePythonCommand,
+  setWindowsStartupTask,
   verifyBackendResourceIntegrity
 } = require('./backend-runtime');
 
@@ -23,17 +26,25 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_RENDERER_WIDTH = 1280;
 const DEFAULT_RENDERER_HEIGHT = 820;
 const SHUTDOWN_TIMEOUT_MS = 5000;
+const LIFECYCLE_REQUEST_TIMEOUT_MS = 30000;
 const APP_SETTINGS_FILE = 'app-settings.json';
-const APP_SETTINGS_VERSION = 2;
+const APP_SETTINGS_VERSION = 3;
 const DEFAULT_APP_SETTINGS = {
   settingsVersion: APP_SETTINGS_VERSION,
+  revision: 0,
   language: 'en',
   launchAtWindowsStartup: false,
   minimizeToTrayOnStart: false,
-  startIsolatorAutomatically: false,
   notificationToastsEnabled: true,
   firstRunCompleted: false
 };
+const APP_SETTINGS_PATCH_KEYS = new Set([
+  'language',
+  'launchAtWindowsStartup',
+  'minimizeToTrayOnStart',
+  'notificationToastsEnabled',
+  'firstRunCompleted'
+]);
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -60,6 +71,8 @@ let liveStreamRequest = null;
 let liveStreamReconnectTimer = null;
 let liveStreamStopped = true;
 let liveStreamBuffer = '';
+let appSettingsState = null;
+let monitoringDesiredForSession = true;
 const MAX_BACKEND_RESTARTS = 4;
 const FALLBACK_PYTHON_COMMANDS = ['py', 'python3'];
 const backendApiToken = crypto.randomBytes(32).toString('hex');
@@ -84,10 +97,10 @@ function normalizeAppSettings(candidate = {}) {
   const language = candidate.language === 'ru' ? 'ru' : 'en';
   return {
     settingsVersion: APP_SETTINGS_VERSION,
+    revision: Number.isSafeInteger(candidate.revision) && candidate.revision >= 0 ? candidate.revision : 0,
     language,
     launchAtWindowsStartup: Boolean(candidate.launchAtWindowsStartup),
     minimizeToTrayOnStart: Boolean(candidate.minimizeToTrayOnStart),
-    startIsolatorAutomatically: Boolean(candidate.startIsolatorAutomatically),
     notificationToastsEnabled: candidate.notificationToastsEnabled !== false,
     firstRunCompleted: Boolean(candidate.firstRunCompleted)
   };
@@ -97,52 +110,115 @@ function appSettingsPath() {
   return path.join(app.getPath('userData'), APP_SETTINGS_FILE);
 }
 
+function startupTaskOptions() {
+  // Electron's development entry point is ui/package.json, not the repository
+  // root used by the Python backend.
+  return app.isPackaged ? {} : { arguments: [__dirname] };
+}
+
 function readStoredAppSettings() {
+  if (appSettingsState) {
+    return { ...appSettingsState };
+  }
   try {
     const raw = fs.readFileSync(appSettingsPath(), 'utf8');
     const parsed = JSON.parse(raw);
-    if (parsed.settingsVersion !== APP_SETTINGS_VERSION) {
-      parsed.minimizeToTrayOnStart = false;
-    }
-    return normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, ...parsed });
+    appSettingsState = normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, ...parsed });
   } catch (_error) {
-    return { ...DEFAULT_APP_SETTINGS };
+    appSettingsState = { ...DEFAULT_APP_SETTINGS };
   }
+  return { ...appSettingsState };
 }
 
 function readAppSettings() {
   const settings = readStoredAppSettings();
+  let legacyEnabled = false;
+  let legacyStateKnown = true;
   try {
-    settings.launchAtWindowsStartup = Boolean(app.getLoginItemSettings().openAtLogin);
+    legacyEnabled = Boolean(app.getLoginItemSettings().openAtLogin);
+  } catch (_error) {
+    legacyStateKnown = false;
+  }
+
+  let taskEnabled = false;
+  try {
+    const legacyCleared = disableLegacyLoginItem();
+    taskEnabled = isWindowsStartupTaskEnabled();
+    if (!legacyCleared && (legacyEnabled || !legacyStateKnown)) {
+      if (taskEnabled) {
+        taskEnabled = setWindowsStartupTask(false, process.execPath, startupTaskOptions());
+      }
+    } else if (settings.launchAtWindowsStartup || legacyEnabled) {
+      taskEnabled = setWindowsStartupTask(true, process.execPath, startupTaskOptions());
+    }
+    settings.launchAtWindowsStartup = Boolean(taskEnabled);
   } catch (_error) {
     settings.launchAtWindowsStartup = false;
   }
-  return settings;
+  appSettingsState = normalizeAppSettings(settings);
+  persistAppSettings(appSettingsState);
+  return { ...appSettingsState };
 }
 
-function applyLoginItemSetting(enabled) {
-  app.setLoginItemSettings({
-    openAtLogin: Boolean(enabled),
-    path: process.execPath
-  });
-}
-
-function writeAppSettings(candidate) {
-  const settings = normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, ...candidate });
+function disableLegacyLoginItem() {
   try {
-    applyLoginItemSetting(settings.launchAtWindowsStartup);
-    settings.launchAtWindowsStartup = Boolean(app.getLoginItemSettings().openAtLogin);
+    app.setLoginItemSettings({ openAtLogin: false, path: process.execPath });
+    return true;
   } catch (_error) {
-    settings.launchAtWindowsStartup = false;
+    return false;
   }
+}
+
+function persistAppSettings(settings) {
   const target = appSettingsPath();
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  // Fix: atomic write (write to .tmp then rename) so a crash mid-write cannot
-  // corrupt app-settings.json and silently reset the user's settings.
   const tmp = `${target}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
   fs.renameSync(tmp, target);
-  return settings;
+}
+
+function validateAppSettingsPatch(patch) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+    throw new TypeError('App settings patch must be an object.');
+  }
+  const validatedPatch = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (!APP_SETTINGS_PATCH_KEYS.has(key)) {
+      throw new TypeError(`Unsupported app setting: ${key}`);
+    }
+    if (key === 'language') {
+      if (value !== 'en' && value !== 'ru') {
+        throw new TypeError('language must be en or ru.');
+      }
+    } else if (typeof value !== 'boolean') {
+      throw new TypeError(`${key} must be a boolean.`);
+    }
+    validatedPatch[key] = value;
+  }
+  return validatedPatch;
+}
+
+function writeAppSettings(patch) {
+  const validatedPatch = validateAppSettingsPatch(patch);
+  const current = readAppSettings();
+  if (Object.keys(validatedPatch).length === 0) {
+    return current;
+  }
+  if (Object.prototype.hasOwnProperty.call(validatedPatch, 'launchAtWindowsStartup')) {
+    if (!disableLegacyLoginItem()) {
+      throw new Error('Failed to remove the legacy Windows login item.');
+    }
+    setWindowsStartupTask(Boolean(validatedPatch.launchAtWindowsStartup), process.execPath, startupTaskOptions());
+  }
+  const settings = normalizeAppSettings({
+    ...current,
+    ...validatedPatch,
+    launchAtWindowsStartup: isWindowsStartupTaskEnabled(),
+    revision: current.revision + 1
+  });
+  persistAppSettings(settings);
+  appSettingsState = settings;
+  return { ...settings };
 }
 
 function createTrayIcon(state) {
@@ -176,7 +252,7 @@ function setTrayState(state) {
     return;
   }
   tray.setImage(createTrayIcon(state));
-  tray.setToolTip(`Esports Isolator PRO - ${state}`);
+  tray.setToolTip(`UltraIsolator - ${state}`);
 }
 
 function updateTrayFromStatus(status) {
@@ -245,7 +321,10 @@ function requestBackendJson(urlPath, options = {}) {
 }
 
 function postJson(urlPath) {
-  return requestBackendJson(urlPath, { method: 'POST' });
+  return requestBackendJson(urlPath, {
+    method: 'POST',
+    timeout: LIFECYCLE_REQUEST_TIMEOUT_MS
+  });
 }
 
 function getJson(urlPath) {
@@ -406,10 +485,15 @@ function resolveBackendOperation(request = {}) {
 async function proxyBackendRequest(event, request) {
   assertTrustedIpcSender(event);
   const operation = resolveBackendOperation(request);
+  if (operation.path === '/api/start') {
+    monitoringDesiredForSession = true;
+  } else if (operation.path === '/api/stop') {
+    monitoringDesiredForSession = false;
+  }
   return await requestBackendJson(operation.path, {
     method: operation.method,
     body: operation.body,
-    timeout: 5000
+    timeout: operation.method === 'POST' ? LIFECYCLE_REQUEST_TIMEOUT_MS : 5000
   });
 }
 
@@ -564,9 +648,13 @@ function attachBackendHandlers() {
         if (isQuitting) {
           return;
         }
-        startBackend().then(() => {
+        startBackend().then(async () => {
           startTrayStatusPolling();
-          refreshStatusOnce();
+          if (monitoringDesiredForSession) {
+            await startIsolator();
+          } else {
+            refreshStatusOnce();
+          }
         }).catch((error) => {
           console.error(`[api] backend restart failed: ${error.message}`);
           setTrayState('error');
@@ -625,7 +713,7 @@ function rendererUrl() {
     const diagnostic = [
       '<!doctype html><html><head><meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width,initial-scale=1">',
-      '<title>Esports Isolator PRO</title>',
+      '<title>UltraIsolator</title>',
       '<style>body{margin:0;background:#0A0A0A;color:#E8E8EC;font-family:Inter,Segoe UI,sans-serif}',
       '.shell{display:grid;place-items:center;min-height:100vh;padding:32px}.mark{color:#FF4757;font:700 20px Consolas,monospace;letter-spacing:.08em}',
       '.sub{margin-top:10px;color:#E8E8EC;font-size:13px;max-width:720px;line-height:1.5}</style></head>',
@@ -641,7 +729,7 @@ function rendererUrl() {
   const fallback = [
     '<!doctype html><html><head><meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
-    '<title>Esports Isolator PRO</title>',
+    '<title>UltraIsolator</title>',
     '<style>body{margin:0;background:#0A0A0A;color:#E8E8EC;font-family:Inter,Segoe UI,sans-serif}',
     '.shell{display:grid;place-items:center;min-height:100vh}.mark{color:#00D4AA;font:700 20px Consolas,monospace;letter-spacing:.08em}',
     '.sub{margin-top:10px;color:#AAAAAA;font-size:13px}</style></head>',
@@ -666,7 +754,7 @@ function rendererFailureUrl(detail) {
   const fallback = [
     '<!doctype html><html><head><meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
-    '<title>Esports Isolator PRO</title>',
+    '<title>UltraIsolator</title>',
     '<style>body{margin:0;background:#0A0A0A;color:#E8E8EC;font-family:Inter,Segoe UI,sans-serif}',
     '.shell{display:grid;place-items:center;min-height:100vh}.mark{color:#FF4757;font:700 20px Consolas,monospace;letter-spacing:.08em}',
     '.sub{margin-top:10px;color:#AAAAAA;font-size:13px;max-width:560px;line-height:1.5}</style></head>',
@@ -934,6 +1022,7 @@ function hideMainWindow() {
 }
 
 async function startIsolator() {
+  monitoringDesiredForSession = true;
   try {
     const result = await postJson('/api/start');
     updateTrayFromStatus(result.status || { running: result.ok, game_mode: false });
@@ -943,6 +1032,7 @@ async function startIsolator() {
 }
 
 async function stopIsolator() {
+  monitoringDesiredForSession = false;
   try {
     const result = await postJson('/api/stop');
     updateTrayFromStatus(result.status || { running: false, game_mode: false });
@@ -982,7 +1072,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 640,
     show: false,
-    title: 'Esports Isolator PRO',
+    title: 'UltraIsolator',
     icon: path.join(__dirname, 'assets/icon.ico'),
     backgroundColor: '#0A0A0A',
     autoHideMenuBar: true,
@@ -1115,6 +1205,16 @@ function requestGracefulQuit() {
   });
 }
 
+function getAppSettingsForRenderer(event) {
+  assertTrustedIpcSender(event);
+  return readAppSettings();
+}
+
+function updateAppSettingsForRenderer(event, patch) {
+  assertTrustedIpcSender(event);
+  return writeAppSettings(patch);
+}
+
 function registerIpcHandlers() {
   if (ipcHandlersRegistered) {
     return;
@@ -1130,8 +1230,8 @@ function registerIpcHandlers() {
   });
   ipcMain.handle('window:close-to-tray', () => hideMainWindow());
   ipcMain.handle('window:show', () => showMainWindow());
-  ipcMain.handle('app-settings:get', () => readAppSettings());
-  ipcMain.handle('app-settings:update', (_event, settings) => writeAppSettings(settings));
+  ipcMain.handle('app-settings:get', getAppSettingsForRenderer);
+  ipcMain.handle('app-settings:update', updateAppSettingsForRenderer);
   ipcMain.handle('tray:status', (_event, status) => {
     updateTrayFromStatus(status);
     return true;
@@ -1196,11 +1296,7 @@ async function bootstrap() {
     createWindow();
   }
   updateTrayMenu();
-  if (appSettings.startIsolatorAutomatically) {
-    await startIsolator();
-  } else {
-    refreshStatusOnce();
-  }
+  await startIsolator();
   if (appSettings.minimizeToTrayOnStart) {
     await ensureRendererLoaded();
   } else {
@@ -1212,34 +1308,45 @@ async function bootstrap() {
 if (!singleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    showMainWindow();
-  });
+  let elevationError = null;
+  try {
+    assertProcessElevated();
+  } catch (error) {
+    elevationError = error;
+  }
+  if (elevationError) {
+    console.error(`[bootstrap] ${elevationError.code || 'administrator_required'}`);
+    app.exit(elevationError.exitCode || 5);
+  } else {
+    app.on('second-instance', () => {
+      showMainWindow();
+    });
 
-  app.whenReady().then(bootstrap).catch(handleBootstrapFailure);
+    app.whenReady().then(bootstrap).catch(handleBootstrapFailure);
 
-  app.on('activate', showMainWindow);
+    app.on('activate', showMainWindow);
 
-  app.on('before-quit', (event) => {
-    if (!isQuitting) {
+    app.on('before-quit', (event) => {
+      if (!isQuitting) {
+        event.preventDefault();
+        quitApplication();
+      }
+    });
+
+    app.on('will-quit', () => {
+      globalShortcut.unregisterAll();
+    });
+
+    app.on('window-all-closed', (event) => {
       event.preventDefault();
-      quitApplication();
-    }
-  });
+    });
 
-  app.on('will-quit', () => {
-    globalShortcut.unregisterAll();
-  });
+    process.on('SIGINT', () => {
+      requestGracefulQuit();
+    });
 
-  app.on('window-all-closed', (event) => {
-    event.preventDefault();
-  });
-
-  process.on('SIGINT', () => {
-    requestGracefulQuit();
-  });
-
-  process.on('SIGTERM', () => {
-    requestGracefulQuit();
-  });
+    process.on('SIGTERM', () => {
+      requestGracefulQuit();
+    });
+  }
 }

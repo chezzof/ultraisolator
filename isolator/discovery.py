@@ -24,6 +24,22 @@ _PROTECTED_TITLE_TOKENS = ("easyanticheat", "battleye", "beservice", "vgc", "vgt
 
 
 class DiscoveryMixin:
+    def _clear_discovery_issues(self, provider):
+        prefix = f"{provider}_"
+        with self._state_lock:
+            self._discovery_issues[:] = [
+                issue for issue in self._discovery_issues
+                if not str(issue.get("code", "")).startswith(prefix)
+            ]
+
+    def _record_discovery_issue(self, code, **data):
+        issue = {"code": str(code), "data": dict(data)}
+        with self._state_lock:
+            if issue not in self._discovery_issues:
+                self._discovery_issues.append(issue)
+                if len(self._discovery_issues) > 50:
+                    del self._discovery_issues[:-50]
+
     def _app_profile_for_name(self, name):
         normalized = name if name and "\\" not in str(name) and "/" not in str(name) else self._normalize_name(name)
         profile = getattr(self, "app_profiles", {}).get(normalized)
@@ -238,39 +254,65 @@ class DiscoveryMixin:
         if not force and (now - self._last_steam_scan) < 300:
             return
         self._last_steam_scan = now
+        self._clear_discovery_issues("steam")
         steam_path = self._get_steam_path()
-        if not steam_path:
-            self._note_capability("Steam not found in registry — Steam auto-detection disabled.")
-            self.auto_detect_steam = False
-            return
-        library_paths = list(self.steam_library_paths) if self.steam_library_paths else [os.path.join(steam_path, "steamapps", "common")]
-        vdf_path = os.path.join(steam_path, "steamapps", "libraryfolders.vdf")
-        if os.path.exists(vdf_path):
+        library_paths = []
+        for configured_path in self.steam_library_paths:
+            common_path = self._steam_common_directory(configured_path)
+            if common_path:
+                library_paths.append(common_path)
+        if steam_path:
+            library_paths.append(os.path.join(steam_path, "steamapps", "common"))
+        elif not library_paths:
+            self._record_discovery_issue("steam_install_not_found")
+
+        vdf_path = os.path.join(steam_path, "steamapps", "libraryfolders.vdf") if steam_path else ""
+        if vdf_path and os.path.exists(vdf_path):
             try:
                 with open(vdf_path, "r", encoding="utf-8") as f:
                     for p in re.findall(r'"path"\s+"([^"]+)"', f.read()):
                         p = p.replace("\\\\", "\\")
-                        common = os.path.join(p, "steamapps", "common")
-                        if os.path.exists(common) and common not in library_paths:
+                        common = self._steam_common_directory(p)
+                        if common and os.path.exists(common) and common not in library_paths:
                             library_paths.append(common)
-            except Exception:
-                pass
+            except (OSError, UnicodeError) as exc:
+                self._record_discovery_issue(
+                    "steam_library_manifest_read_failed",
+                    path=vdf_path,
+                    error=type(exc).__name__,
+                )
         steam_games = set()
+        seen_paths = set()
         for lib in library_paths:
+            path_key = os.path.normcase(os.path.abspath(lib))
+            if path_key in seen_paths:
+                continue
+            seen_paths.add(path_key)
             if not os.path.exists(lib):
+                self._record_discovery_issue("steam_library_unavailable", path=lib)
                 continue
             try:
-                for game_dir in os.listdir(lib):
-                    game_path = os.path.join(lib, game_dir)
-                    if not os.path.isdir(game_path):
-                        continue
-                    # WHY: Walk up to 3 levels deep to find actual game .exe files.
-                    # Steam games typically have their .exe buried 1-3 levels under
-                    # steamapps/common/GameName/. Only scanning level 1 misses most.
-                    self._scan_for_game_exes(game_path, steam_games, max_depth=3)
-            except Exception:
-                continue
+                self._scan_for_game_exes(lib, steam_games, max_depth=4)
+            except OSError as exc:
+                self._record_discovery_issue(
+                    "steam_library_scan_failed",
+                    path=lib,
+                    error=type(exc).__name__,
+                )
         self._steam_games_cache = steam_games
+
+    @staticmethod
+    def _steam_common_directory(path):
+        if not isinstance(path, str) or not path.strip():
+            return None
+        normalized = os.path.normpath(path.strip())
+        basename = os.path.basename(normalized).lower()
+        parent_basename = os.path.basename(os.path.dirname(normalized)).lower()
+        if basename == "common" and parent_basename == "steamapps":
+            return normalized
+        if basename == "steamapps":
+            return os.path.join(normalized, "common")
+        return os.path.join(normalized, "steamapps", "common")
 
     @staticmethod
     def _looks_like_game_exe(exe_name, exe_full_path=None):
@@ -297,7 +339,10 @@ class DiscoveryMixin:
         # subtrees AND so depth-(max_depth+1) directories are never entered
         # in the first place. The previous implementation called _dirs.clear()
         # AFTER already walking depth-(max_depth+1), wasting filesystem I/O.
-        for current_root, dirs, files in os.walk(root_path):
+        def raise_walk_error(error):
+            raise error
+
+        for current_root, dirs, files in os.walk(root_path, onerror=raise_walk_error):
             rel = os.path.relpath(current_root, root_path)
             depth = 0 if rel in (".", "") else rel.count(os.sep) + 1
             if depth >= max_depth:
@@ -330,28 +375,89 @@ class DiscoveryMixin:
         except Exception:
             return r"C:\Program Files\Epic Games" if os.path.exists(r"C:\Program Files\Epic Games") else None
 
+    def _get_epic_manifest_dirs(self):
+        paths = []
+        program_data = os.environ.get("ProgramData")
+        if program_data:
+            paths.append(os.path.join(program_data, "Epic", "EpicGamesLauncher", "Data", "Manifests"))
+        return paths
+
+    def _read_epic_manifests(self):
+        install_paths = []
+        launch_executables = set()
+        for manifest_dir in self._get_epic_manifest_dirs():
+            if not os.path.isdir(manifest_dir):
+                continue
+            try:
+                manifest_names = [name for name in os.listdir(manifest_dir) if name.lower().endswith(".item")]
+            except OSError as exc:
+                self._record_discovery_issue(
+                    "epic_manifest_directory_read_failed",
+                    path=manifest_dir,
+                    error=type(exc).__name__,
+                )
+                continue
+            for manifest_name in manifest_names:
+                manifest_path = os.path.join(manifest_dir, manifest_name)
+                try:
+                    with open(manifest_path, "r", encoding="utf-8") as handle:
+                        manifest = json.load(handle)
+                except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                    self._record_discovery_issue(
+                        "epic_manifest_read_failed",
+                        path=manifest_path,
+                        error=type(exc).__name__,
+                    )
+                    continue
+                if not isinstance(manifest, dict):
+                    self._record_discovery_issue(
+                        "epic_manifest_invalid",
+                        path=manifest_path,
+                    )
+                    continue
+                install_location = manifest.get("InstallLocation")
+                if isinstance(install_location, str) and install_location.strip():
+                    install_paths.append(os.path.normpath(install_location.strip()))
+                launch_executable = manifest.get("LaunchExecutable")
+                if isinstance(launch_executable, str):
+                    exe_name = os.path.basename(launch_executable.replace("\\", os.sep))
+                    if self._looks_like_game_exe(exe_name):
+                        launch_executables.add(exe_name.lower())
+        return install_paths, launch_executables
+
     def _scan_epic_games(self, force=False):
         now = time.monotonic()
         if not force and (now - self._last_epic_scan) < 300:
             return
         self._last_epic_scan = now
+        self._clear_discovery_issues("epic")
         base = self._get_epic_path()
-        paths = list(self.epic_library_paths) if self.epic_library_paths else ([base] if base and os.path.exists(base) else [])
+        paths = list(self.epic_library_paths)
+        if base and os.path.exists(base):
+            paths.append(base)
         if os.path.exists(r"C:\Program Files\Epic Games") and r"C:\Program Files\Epic Games" not in paths:
             paths.append(r"C:\Program Files\Epic Games")
-        epic_games = set()
+        manifest_paths, epic_games = self._read_epic_manifests()
+        paths.extend(manifest_paths)
+        if not paths:
+            self._record_discovery_issue("epic_install_not_found")
+        seen_paths = set()
         for lib in paths:
+            path_key = os.path.normcase(os.path.abspath(lib))
+            if path_key in seen_paths:
+                continue
+            seen_paths.add(path_key)
             if not os.path.exists(lib):
+                self._record_discovery_issue("epic_library_unavailable", path=lib)
                 continue
             try:
-                for game_dir in os.listdir(lib):
-                    game_path = os.path.join(lib, game_dir)
-                    if not os.path.isdir(game_path):
-                        continue
-                    # WHY: Walk up to 3 levels deep, same approach as Steam scan.
-                    self._scan_for_game_exes(game_path, epic_games, max_depth=3)
-            except Exception:
-                continue
+                self._scan_for_game_exes(lib, epic_games, max_depth=4)
+            except OSError as exc:
+                self._record_discovery_issue(
+                    "epic_library_scan_failed",
+                    path=lib,
+                    error=type(exc).__name__,
+                )
         self._epic_games_cache = epic_games
 
     def _is_epic_game(self, exe_path):

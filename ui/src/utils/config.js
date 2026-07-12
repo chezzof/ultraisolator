@@ -13,6 +13,10 @@ export function fieldLabel(field) {
   return FIELD_LABELS[field] || field;
 }
 
+function validationError(key, fallback, params = {}, field = null) {
+  return { key: `validation.${key}`, fallback, params, field };
+}
+
 export function parseListValue(value) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item).trim()).filter(Boolean);
@@ -42,7 +46,7 @@ export function validateAppProfilesDraft(value, spec = {}) {
   const seen = new Set();
   const priorityChoices = spec.priority_choices || [];
   if (!Array.isArray(value)) {
-    errors.app_profiles = 'Per-app profiles must be a list.';
+    errors.app_profiles = validationError('profileList', 'App-specific rules must be a list.');
     return { profiles, errors };
   }
 
@@ -50,18 +54,18 @@ export function validateAppProfilesDraft(value, spec = {}) {
     const profile = { ...EMPTY_APP_PROFILE, ...(item || {}) };
     const exe = String(profile.exe || '').trim().toLowerCase();
     if (!exe) {
-      errors[`app_profiles[${index}].exe`] = 'Profile executable is required.';
+      errors[`app_profiles[${index}].exe`] = validationError('executableRequired', 'Application executable is required.');
     } else if (seen.has(exe)) {
-      errors[`app_profiles[${index}].exe`] = `Duplicate profile executable: ${exe}.`;
+      errors[`app_profiles[${index}].exe`] = validationError('duplicateExecutable', 'Duplicate application executable: {{exe}}.', { exe });
     }
     seen.add(exe);
 
     const priority = String(profile.priority_class || '').trim().toLowerCase();
     if (priority && !priorityChoices.includes(priority)) {
-      errors[`app_profiles[${index}].priority_class`] = `Priority must be one of: ${priorityChoices.join(', ')}.`;
+      errors[`app_profiles[${index}].priority_class`] = validationError('priorityChoice', 'Priority must be one of: {{choices}}.', { choices: priorityChoices.join(', ') });
     }
     if (profile.never_jail && profile.always_jail) {
-      errors[`app_profiles[${index}]`] = 'Choose never jail or always jail, not both.';
+      errors[`app_profiles[${index}]`] = validationError('profileRuleConflict', 'Choose either “Always leave unchanged” or “Always limit in background”.');
     }
 
     profiles.push({
@@ -103,7 +107,7 @@ export function validateConfigDraft(draft, schema) {
     if (spec.type === 'choice') {
       const selected = String(value || '').trim().toLowerCase();
       if (!spec.choices.includes(selected)) {
-        errors[field] = `${fieldLabel(field)} must be one of: ${spec.choices.join(', ')}.`;
+        errors[field] = validationError('choice', '{{field}} must be one of: {{choices}}.', { choices: spec.choices.join(', ') }, field);
       } else {
         config[field] = selected;
       }
@@ -112,20 +116,20 @@ export function validateConfigDraft(draft, schema) {
     if (spec.type === 'int' || spec.type === 'float') {
       const text = String(value).trim();
       if (!text) {
-        errors[field] = `${fieldLabel(field)} is required.`;
+        errors[field] = validationError('required', '{{field}} is required.', {}, field);
         continue;
       }
       const numeric = Number(text);
       if (!Number.isFinite(numeric)) {
-        errors[field] = `${fieldLabel(field)} must be a number.`;
+        errors[field] = validationError('number', '{{field}} must be a number.', {}, field);
         continue;
       }
       if (spec.type === 'int' && !Number.isInteger(numeric)) {
-        errors[field] = `${fieldLabel(field)} must be an integer.`;
+        errors[field] = validationError('integer', '{{field}} must be a whole number.', {}, field);
         continue;
       }
       if (typeof spec.min === 'number' && numeric < spec.min) {
-        errors[field] = `${fieldLabel(field)} must be >= ${spec.min}.`;
+        errors[field] = validationError('minimum', '{{field}} must be at least {{min}}.', { min: spec.min }, field);
         continue;
       }
       config[field] = numeric;

@@ -19,7 +19,7 @@ async function expectNoA11yViolations(page, selector) {
 test.describe('renderer accessibility smoke', () => {
   test('Dashboard has no axe violations', async ({ page }) => {
     await gotoMockedRenderer(page, '#dashboard');
-    await expectNoA11yViolations(page, '.dashboard-command-center');
+    await expectNoA11yViolations(page, '.dashboard-profile-hero');
   });
 
   test('Settings has no axe violations', async ({ page }) => {
@@ -29,6 +29,6 @@ test.describe('renderer accessibility smoke', () => {
 
   test('Topology has no axe violations', async ({ page }) => {
     await gotoMockedRenderer(page, '#topology');
-    await expectNoA11yViolations(page, '.topology-core-map');
+    await expectNoA11yViolations(page, '.topology-map');
   });
 });

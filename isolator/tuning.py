@@ -908,17 +908,17 @@ class TuningMixin:
             self._log(f"[INFO] Newly throttled: {summary}.")
         return {"touched": touched, "skipped": skipped, "denied": denied, "deferred": deferred, "names": touched_names}
 
-    def _find_game_processes(self, processes=None):
+    def _find_game_process_entries(self, processes=None):
         # WHY: Use combined set for fast O(1) lookup by name. Only fall back to
         # expensive full-path checks for processes not matched by name.
-        result = []
+        result = {}
         unknown = []
         process_list = processes if processes is not None else self._get_processes()
         for pid, exe_name in process_list:
             if not exe_name or pid in (0, 4, self._self_pid, self._parent_pid):
                 continue
             if self._is_game_name_normalized(exe_name):
-                result.append(pid)
+                result[int(pid)] = exe_name
             elif self.auto_detect_steam or self.auto_detect_epic:
                 unknown.append((pid, exe_name))
         # WHY: Only call _get_process_full_path for processes not matched by name.
@@ -933,7 +933,7 @@ class TuningMixin:
                 cached = self._path_classification_cache.get(cache_key)
                 if cached is not None:
                     if cached:
-                        result.append(pid)
+                        result[int(pid)] = exe_name
                     continue
             path = self._get_process_full_path(pid)
             if not path:
@@ -946,41 +946,58 @@ class TuningMixin:
             is_path_game = False
             if self.auto_detect_steam and self._is_steam_game(path):
                 is_path_game = True
-                result.append(pid)
+                result[int(pid)] = exe_name
             elif self.auto_detect_epic and self._is_epic_game(path):
                 is_path_game = True
-                result.append(pid)
+                result[int(pid)] = exe_name
             if create_time:
                 self._path_classification_cache[cache_key] = is_path_game
                 if len(self._path_classification_cache) > 1000:
                     self._path_classification_cache.clear()
         return result
 
-    def _optimize_game(self, pid):
+    def _find_game_processes(self, processes=None):
+        return list(self._find_game_process_entries(processes).keys())
+
+    def _optimize_game(self, pid, name=None):
+        return self._optimize_game_with_state(pid, name) == "applied"
+
+    def _optimize_game_with_state(self, pid, name=None, classified_as_game=False):
         if not self._begin_process_mutation():
-            return False
+            return "skipped"
         try:
-            return self._optimize_game_impl(pid)
+            return self._optimize_game_impl(
+                pid,
+                name=name,
+                classified_as_game=classified_as_game,
+            )
         finally:
             self._end_process_mutation()
 
-    def _optimize_game_impl(self, pid):
+    def _optimize_game_impl(self, pid, name=None, classified_as_game=False):
         pid = int(pid)
-        name = self._get_process_name(pid)
-        if not self._is_game_name(name):
-            return False
+        snapshot_name_supplied = bool(name)
+        name = self._normalize_name(name) if name else self._get_process_name(pid)
+        if not classified_as_game and not self._is_game_name_normalized(name):
+            return "failed"
         protected_title = self._detect_protected_title(name)
         if protected_title and self.anti_cheat_mode == "conservative":
             self._log_once(("protected_game_skip", name), f"[INFO] Conservative anti-cheat policy skipped direct game tuning for {name}.")
-            return False
+            return "skipped"
 
         handle = self._open_process(pid, PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_INFORMATION | PROCESS_SET_LIMITED_INFORMATION, quiet=True)
         if not handle:
-            return False
+            return "blocked"
 
         try:
-            if not self._pid_identity_matches_snapshot(pid, handle, name, "optimize_game"):
-                return False
+            if not self._pid_identity_matches_snapshot(
+                pid,
+                handle,
+                name,
+                "optimize_game",
+                trust_snapshot_name=snapshot_name_supplied,
+            ):
+                return "failed"
             # WHY: Snapshot inside the try/finally so a failure during
             # state capture cannot leak the open handle.
             self._remember_process_state(pid, handle, name, source="optimize_game")
@@ -1013,14 +1030,14 @@ class TuningMixin:
             # Disabled _tune_hot_threads to prevent massive FPS micro-stutters
             
             self._log(f"[GAME] Optimized running game: {name} (pid={pid})")
-            return True
+            return "applied"
         except OSError as exc:
             self._log_once(("optimize_game", pid), f"[WARN] Failed to optimize game pid={pid}: {exc}")
-            return False
+            return "failed"
         finally:
             kernel32.CloseHandle(handle)
 
-    def _pid_identity_matches_snapshot(self, pid, handle, expected_name, operation):
+    def _pid_identity_matches_snapshot(self, pid, handle, expected_name, operation, trust_snapshot_name=False):
         expected_create_time = int(getattr(self, "_process_create_times", {}).get(int(pid), 0) or 0)
         current_create_time = self._get_process_create_time(handle)
         if expected_create_time and current_create_time and expected_create_time != current_create_time:
@@ -1029,7 +1046,7 @@ class TuningMixin:
                 f"[INFO] Skipping {operation} for pid={pid} ({expected_name}): PID reuse detected.",
             )
             return False
-        if not expected_create_time or not current_create_time:
+        if (not expected_create_time or not current_create_time) and not trust_snapshot_name:
             current_name = self._normalize_name(self._get_process_name(pid))
             if current_name and expected_name and current_name != expected_name:
                 self._log_once(

@@ -70,7 +70,9 @@ exports.default = async function afterPack(context) {
   if (context.electronPlatformName !== 'win32') {
     return;
   }
-  hardenBackendAcl(path.join(context.appOutDir, 'resources', 'backend'));
+  const resourcesRoot = path.join(context.appOutDir, 'resources');
+  hardenDirectoryAcl(path.join(resourcesRoot, 'backend'));
+  hardenDirectoryAcl(path.join(resourcesRoot, 'python'));
 };
 
 module.exports.hardenBackendAcl = hardenBackendAcl;

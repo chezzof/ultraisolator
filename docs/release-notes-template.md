@@ -1,33 +1,16 @@
-# Esports Isolator PRO First Public Release Notes Template
+# Esports Isolator PRO 1.1.1 Release Notes Template
 
 Use this template when publishing a GitHub release.
-
-Release tag: `v1.1.1` (must match `ui/package.json`).
 
 ## Summary
 
 Esports Isolator PRO is a Windows-only process isolation tool for competitive games. It detects configured or discovered games, applies reversible CPU/process/power tuning, and restores the system after the session ends.
 
-This first public release packages the current security-hardening baseline for source plus reproducible local Windows builds.
+This patch release hardens the elevated desktop security boundary before broader public distribution.
 
 ## Artifacts
 
-- `Esports Isolator PRO Setup <version>.exe`
-- `Esports-Isolator-PRO-<version>-portable.exe`
-- `SHA256SUMS.txt`
-
-For `v1.1.1`, the local build output names are:
-
 - `Esports Isolator PRO Setup 1.1.1.exe`
-- `Esports-Isolator-PRO-1.1.1-portable.exe`
-- `SHA256SUMS.txt`
-
-The public GitHub Release asset names are authoritative for download
-verification. GitHub normalizes spaces in the installer asset name during
-upload, so the published `v1.1.1` assets are:
-
-- `Esports.Isolator.PRO.Setup.1.1.1.exe`
-- `Esports-Isolator-PRO-1.1.1-portable.exe`
 - `SHA256SUMS.txt`
 
 Generate artifacts and checksums with:
@@ -35,14 +18,6 @@ Generate artifacts and checksums with:
 ```powershell
 powershell -File scripts/release-check.ps1
 ```
-
-The release gate also runs installed and portable artifact verification. It
-extracts the NSIS and portable payloads with 7-Zip, checks `resources/backend`
-against the trusted app-bundle manifest, and verifies packaged runtime
-provenance. ACL safety is checked on `win-unpacked` before cleanup; temporary
-extraction ACLs are not treated as install-location ACL evidence. If 7-Zip is
-not on `PATH`, set `EII_SEVEN_ZIP` to a trusted `7z.exe`. Do not use
-`EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY=1` for published artifacts.
 
 ## Verification
 
@@ -60,9 +35,7 @@ Expected gate coverage:
 - Renderer build.
 - Deterministic asset generation.
 - UI smoke test.
-- Windows NSIS and portable package build.
-- Packaged runtime provenance verification.
-- Installed and portable artifact verification.
+- Windows per-machine NSIS package build.
 - SHA256 checksum manifest.
 - Public docs and screenshot presence checks.
 - Local config/log/recovery/package ignore checks.
@@ -70,25 +43,22 @@ Expected gate coverage:
 ## Requirements
 
 - Windows 10/11.
-- Python 3.12+; packaged builds require `EII_PYTHON` set to a trusted absolute interpreter path.
-- Administrator elevation for full CPU Sets, IFEO, power plan, timer, and process tuning behavior.
+- The installer includes its own Python 3.12 runtime and pinned `psutil`; no separate Python installation is required.
+- Administrator elevation is mandatory; the application exits before starting its UI or backend when elevation is unavailable.
 
 ## Security and Compatibility Notes
 
 - The installer is not code-signed in this repository. Windows SmartScreen may warn on downloaded artifacts.
 - Background jailing remains opt-in.
-- The desktop localhost API token is owned by Electron main; the renderer uses allowlisted IPC proxy operations and never receives the raw token.
-- IFEO and power recovery state is stored as authenticated protected state and fails closed if tampered.
-- Packaged startup verifies backend resource integrity and protected ACL assumptions before launching Python.
-- Run the elevated packaged app only with a trusted Python interpreter configured through absolute `EII_PYTHON`.
+- The desktop localhost API is protected by a per-launch token; do not expose or proxy it to other users.
+- The packaged app uses its protected bundled interpreter; arbitrary inherited `EII_PYTHON` paths are rejected.
 - Do not use this project to bypass, disable, or tamper with anti-cheat software.
 - If a game or anti-cheat blocks a tuning operation, treat that as a compatibility boundary.
 - Packaged builds can download Electron Builder helper binaries at build time; the app itself does not download or execute remote code at runtime.
 
 ## Checksums
 
-Paste the contents of `ui/dist-packaged/SHA256SUMS.txt` here, then confirm the
-filenames exactly match the public GitHub Release asset names after upload:
+Paste the contents of `ui/dist-packaged/SHA256SUMS.txt` here:
 
 ```text
 

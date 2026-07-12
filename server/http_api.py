@@ -6,7 +6,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .bridge import BridgeConflict
+from .bridge import AdministratorRequired, BridgeConflict
 from .config_store import ConfigError
 
 
@@ -260,8 +260,12 @@ def create_handler(bridge, api_token=None):
                     self._send_json(200, bridge.recover())
                 else:
                     self._send_json(404, {"ok": False, "error": "not_found"})
+            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, TimeoutError):
+                self.close_connection = True
             except BridgeConflict as exc:
                 self._send_json(409, {"ok": False, "error": str(exc)})
+            except AdministratorRequired:
+                self._send_json(403, {"error": "administrator_required"})
             except Exception as exc:
                 self._send_json(500, {"ok": False, "error": type(exc).__name__})
 

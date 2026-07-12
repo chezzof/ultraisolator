@@ -3,13 +3,6 @@ import { Tag, Tile } from '@carbon/react';
 import { requestJson } from '../utils/api.js';
 import { useI18n } from '../i18n.jsx';
 
-function formatBottleneck(payload, t) {
-  if (!payload) {
-    return t('analysis.notEstimated', 'Not estimated');
-  }
-  return payload.detail || payload.label || t('analysis.notEstimated', 'Not estimated');
-}
-
 function checkTone(status) {
   if (status === 'ok') {
     return 'green';
@@ -36,7 +29,7 @@ function checkLabel(check, t) {
 }
 
 function checkDetail(check, t) {
-  return t(`analysis.check.${check.id}.${check.status}`, check.detail);
+  return t(`analysis.check.${check.id}.${check.status}`, check.detail, check.data || {});
 }
 
 export function SystemAnalysis({ live }) {
@@ -65,13 +58,6 @@ export function SystemAnalysis({ live }) {
         grade: 'paused',
         summary,
         categories: [],
-        boost_potential: { label: 'none', points: 0 },
-        bottleneck: {
-          available: false,
-          label: 'Not estimated',
-          reason: 'gpu_metrics_not_collected',
-          detail: 'GPU and RAM telemetry are not collected in this MVP.'
-        },
         checks: [],
         analysis_calls: {
           status_reads: 1,
@@ -107,12 +93,9 @@ export function SystemAnalysis({ live }) {
 
   useEffect(() => {
     loadAnalysis(false);
-  }, [gameMode, live.visible, status.running, status.admin, status.timer_resolution_applied, status.power_plan_active, status.topology_available]);
+  }, [gameMode, live.visible, status.monitoring_active, status.running, status.admin, status.timer_resolution_applied, status.power_plan_active, status.topology_available]);
 
   const score = analysis?.score ?? 0;
-  const boostLabel = analysis?.boost_potential?.label || 'none';
-  const boostPoints = analysis?.boost_potential?.points ?? 0;
-  const bottleneck = formatBottleneck(analysis?.bottleneck, t);
   const checks = Array.isArray(analysis?.checks) ? analysis.checks : [];
   const categories = Array.isArray(analysis?.categories) && analysis.categories.length
     ? analysis.categories
@@ -121,18 +104,16 @@ export function SystemAnalysis({ live }) {
   const warningChecks = checks.filter((check) => check.status === 'warning').length + checks.filter((check) => check.status === 'error').length;
   const summaryText = analysis?.available
     ? t(`analysis.summary.${analysis?.grade}`, analysis?.summary || 'System readiness analysis')
-    : analysis?.summary || t('analysis.paused', 'Analysis paused');
+    : analysis?.summary || (analysisState.loading
+      ? t('analysis.loading', 'Loading setup quality')
+      : t('analysis.unavailable', 'Setup quality is temporarily unavailable'));
   const gradeText = t(`analysis.grade.${analysis?.grade}`, analysis?.grade || 'not scored');
-  const boostText = t(`analysis.boost.${boostLabel}`, boostLabel).toUpperCase();
-  const bottleneckText = analysis?.bottleneck?.reason === 'gpu_metrics_not_collected'
-    ? t('analysis.gpuNotCollected', bottleneck)
-    : bottleneck;
 
   return (
     <Tile className="module-surface analysis-panel">
       <div className="analysis-header">
         <div>
-          <div className="module-title">{t('analysis.title', 'System Analysis')}</div>
+          <div className="module-title">{t('analysis.title', 'Setup quality')}</div>
           <div className="analysis-subtitle">
             {summaryText}
           </div>
@@ -153,48 +134,44 @@ export function SystemAnalysis({ live }) {
           className={`analysis-score${analysis?.available ? '' : ' paused'}`}
           style={{ '--score-angle': `${Math.max(0, Math.min(100, score)) * 3.6}deg` }}
         >
-          <div className="analysis-score-label">{t('analysis.score', 'Optimization Score')}</div>
-          <div className="analysis-score-meter" aria-label={`${t('analysis.score', 'Optimization Score')} ${analysis?.available ? score : t('analysis.paused', 'paused')}`}>
+          <div className="analysis-score-label">{t('analysis.score', 'Setup score')}</div>
+          <div className="analysis-score-meter" aria-label={`${t('analysis.score', 'Setup score')} ${analysis?.available ? score : t('analysis.paused', 'paused')}`}>
             <div>
               <span className="analysis-score-value">{analysis?.available ? score : '--'}</span>
               <span className="analysis-score-unit">{analysis?.available ? '/100' : t('analysis.paused', 'PAUSED')}</span>
             </div>
           </div>
           <div className="analysis-score-detail">
-            {analysis?.available ? t('analysis.gradeLine', '{{grade}} grade').replace('{{grade}}', gradeText) : (gameMode ? t('analysis.noGameAnalysis', 'No analysis while game mode is active') : t('analysis.noHiddenAnalysis', 'No analysis while the window is hidden'))}
+            {analysis?.available
+              ? t('analysis.gradeLine', '{{grade}} grade').replace('{{grade}}', gradeText)
+              : gameMode
+                ? t('analysis.noGameAnalysis', 'Setup quality pauses while a game is active')
+                : hiddenWindow
+                  ? t('analysis.noHiddenAnalysis', 'Setup quality pauses while the window is hidden')
+                  : analysisState.loading
+                    ? t('analysis.loading', 'Loading setup quality')
+                    : t('analysis.unavailable', 'Setup quality is temporarily unavailable')}
           </div>
         </div>
 
         <div className="analysis-summary">
           <div>
-            <span>{t('analysis.boostPotential', 'Boost Potential')}</span>
-            <strong>{analysis?.available ? t('analysis.points', '{{points}} points').replace('{{points}}', boostPoints) : t('analysis.paused', 'Paused')}</strong>
-          </div>
-          <div>
-            <span>{t('analysis.headroom', 'Headroom')}</span>
-            <strong>{analysis?.available ? boostText : t('common.na', 'N/A')}</strong>
-          </div>
-          <div>
-            <span>{t('analysis.gpuBottleneck', 'GPU bottleneck')}</span>
-            <strong>{analysis?.available ? bottleneckText : t('analysis.notEstimated', 'Not estimated')}</strong>
-          </div>
-          <div>
-            <span>{t('analysis.checksPassing', 'Checks passing')}</span>
+            <span>{t('analysis.checksPassing', 'Ready checks')}</span>
             <strong>{analysis?.available ? `${goodChecks}/${checks.length}` : '0/0'}</strong>
           </div>
-          <div className="wide">
-            <span>{t('analysis.categories', 'Categories')}</span>
-            <strong>{analysis?.available ? categories.map((category) => categoryLabel(category, t)).join(' / ') : t('analysis.paused', 'Paused')}</strong>
-          </div>
           <div>
-            <span>{t('analysis.warnings', 'Warnings')}</span>
+            <span>{t('analysis.warnings', 'Needs review')}</span>
             <strong>{analysis?.available ? warningChecks : 0}</strong>
+          </div>
+          <div className="wide">
+            <span>{t('analysis.categories', 'Setup areas')}</span>
+            <strong>{analysis?.available ? categories.map((category) => categoryLabel(category, t)).join(' / ') : t('analysis.paused', 'Paused')}</strong>
           </div>
         </div>
       </div>
 
       {analysis?.available ? (
-        <div className="analysis-check-list" aria-label="Analysis checks">
+        <div className="analysis-check-list" aria-label={t('analysis.checkList', 'Setup checks')}>
           {checks.map((check) => (
             <div key={check.id} className={`analysis-check ${check.status}`}>
               <div className="analysis-check-top">
@@ -206,7 +183,13 @@ export function SystemAnalysis({ live }) {
           ))}
         </div>
       ) : (
-        <div className="module-empty">{t('analysis.paused', 'Analysis paused')}</div>
+        <div className="module-empty">
+          {gameMode || hiddenWindow
+            ? t('analysis.paused', 'Paused')
+            : analysisState.loading
+              ? t('analysis.loading', 'Loading setup quality')
+              : t('analysis.unavailable', 'Setup quality is temporarily unavailable')}
+        </div>
       )}
     </Tile>
   );

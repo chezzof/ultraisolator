@@ -5,6 +5,7 @@ import ctypes
 import os
 import threading
 
+from isolator.winapi import is_process_elevated
 from .bridge import IsolatorBridge
 from .http_api import create_handler, create_server
 
@@ -70,6 +71,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if not args.api_token and not args.allow_unauthenticated_loopback:
         parser.error("--api-token or EII_API_TOKEN is required; use --allow-unauthenticated-loopback only for local development.")
+    if not is_process_elevated():
+        parser.exit(5, "administrator_required\n")
 
     bridge = IsolatorBridge(config_path=args.config)
     server = create_server((args.host, args.port), create_handler(bridge, api_token=args.api_token))

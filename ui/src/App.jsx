@@ -21,6 +21,7 @@ import { SystemAnalysis } from './components/SystemAnalysis.jsx';
 import { NotificationCenter } from './components/NotificationCenter.jsx';
 import { FirstRunWizard } from './components/FirstRunWizard.jsx';
 import { I18nProvider, useI18n } from './i18n.jsx';
+import brandMark from '../assets/icon.png';
 
 const PAGE_COMPONENTS = {
   dashboard: DashboardPage,
@@ -57,9 +58,10 @@ function AppShell() {
 
   return (
     <div className="app-shell">
-      <Header aria-label="Esports Isolator PRO">
+      <Header aria-label="UltraIsolator">
         <HeaderName href="#" prefix="">
-          {t('app.brand', 'Esports Isolator PRO')}
+          <img className="app-brand-mark" src={brandMark} alt="" />
+          <span>{t('app.brand', 'UltraIsolator')}</span>
         </HeaderName>
         <HeaderGlobalBar>
           <div className="header-status">
@@ -69,7 +71,7 @@ function AppShell() {
         </HeaderGlobalBar>
       </Header>
 
-      <SideNav expanded isPersistent aria-label="Primary navigation">
+      <SideNav expanded isPersistent aria-label={t('nav.primary', 'Primary navigation')}>
         <SideNavItems>
           {PAGES.map((page) => (
             <SideNavLink
@@ -77,6 +79,7 @@ function AppShell() {
               href={`#${page.id}`}
               isActive={activePageId === page.id}
               renderIcon={page.renderIcon}
+              title={t(page.labelKey, page.label)}
               aria-current={activePageId === page.id ? 'page' : undefined}
               onClick={() => setActivePageId(page.id)}
             >
@@ -91,7 +94,7 @@ function AppShell() {
           <ActivePage page={activePage} live={live} />
         </Content>
         <NotificationCenter live={live} />
-        <FirstRunWizard />
+        <FirstRunWizard live={live} />
       </ErrorBoundary>
     </div>
   );

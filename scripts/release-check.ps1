@@ -9,7 +9,6 @@ Set-Location $Root
 $UiPackage = Get-Content -LiteralPath "ui/package.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 $ReleaseVersion = $UiPackage.version
 $InstallerArtifact = "Esports Isolator PRO Setup $ReleaseVersion.exe"
-$PortableArtifact = "Esports-Isolator-PRO-$ReleaseVersion-portable.exe"
 
 function Invoke-Step {
   param(
@@ -42,7 +41,7 @@ function Assert-NonEmptyFile {
 
 function Assert-ReleaseManifest {
   param([Parameter(Mandatory = $true)][string]$Dist)
-  $expected = @($InstallerArtifact, $PortableArtifact)
+  $expected = @($InstallerArtifact)
   foreach ($artifact in $expected) {
     Assert-NonEmptyFile (Join-Path $Dist $artifact)
   }
@@ -59,7 +58,7 @@ function Assert-ReleaseManifest {
     }
   }
   $rootFiles = @(Get-ChildItem -LiteralPath $Dist -File | Select-Object -ExpandProperty Name)
-  $allowed = @($InstallerArtifact, $PortableArtifact, "SHA256SUMS.txt")
+  $allowed = @($InstallerArtifact, "SHA256SUMS.txt")
   $extra = @($rootFiles | Where-Object { $_ -notin $allowed })
   if ($extra.Count -gt 0) {
     throw "Unexpected root release artifact(s): $($extra -join ', ')"
@@ -79,23 +78,6 @@ function Assert-TextClean {
     if ($text.Contains($marker)) {
       throw "Mojibake marker '$marker' found in $Path"
     }
-  }
-}
-
-function Remove-PackageOutputItem {
-  param(
-    [Parameter(Mandatory = $true)][string]$PackageOutput,
-    [Parameter(Mandatory = $true)][string]$Path
-  )
-
-  $resolvedOutput = [System.IO.Path]::GetFullPath($PackageOutput)
-  $resolvedPath = [System.IO.Path]::GetFullPath($Path)
-  $separator = [System.IO.Path]::DirectorySeparatorChar
-  if ($resolvedPath -ne $resolvedOutput -and -not $resolvedPath.StartsWith("$resolvedOutput$separator", [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "Refusing to remove path outside packaged output: $Path"
-  }
-  if (Test-Path -LiteralPath $resolvedPath) {
-    Remove-Item -LiteralPath $resolvedPath -Recurse -Force
   }
 }
 
@@ -155,7 +137,7 @@ if (-not $SkipPackage) {
   )
   foreach ($item in $byproducts) {
     if (Test-Path -LiteralPath $item) {
-      Remove-PackageOutputItem $packageOutput $item
+      node ui/scripts/clean-packaged-output.js $item
     }
   }
 
@@ -165,7 +147,7 @@ if (-not $SkipPackage) {
 
   Assert-ReleaseManifest $packageOutput
 
-  Invoke-Step "Installed and portable artifact verification" {
+  Invoke-Step "Installed artifact verification" {
     # EII_RELEASE_DEV_SKIP_INSTALLED_ARTIFACT_VERIFY=1 is an explicit local
     # development escape hatch handled by the verifier; release builds run it.
     npm --prefix ui run verify:installed-artifacts

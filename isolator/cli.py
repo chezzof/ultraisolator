@@ -1,9 +1,11 @@
 """Command-line entrypoint for Esports Isolator."""
 
 import argparse
+import sys
 import time
 
 from .app import EsportsIsolatorPro
+from .winapi import is_process_elevated
 
 
 def main(argv=None):
@@ -15,6 +17,10 @@ def main(argv=None):
     parser.add_argument("--recover", action="store_true", help="restore persistent IFEO/power recovery state and exit")
     parser.add_argument("--log-file", default=None, help="append timestamped log lines to this file")
     args = parser.parse_args(argv)
+
+    if (args.recover or not args.dry_run) and not is_process_elevated():
+        print("[ERROR] administrator_required", file=sys.stderr)
+        return 5
 
     isolator = EsportsIsolatorPro(config_path=args.config, scan_game_libraries=not args.recover)
     if args.log_file:

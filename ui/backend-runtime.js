@@ -13,6 +13,101 @@ const DYNAMIC_BACKEND_STATE_FILES = new Set([
 ]);
 const IGNORED_BACKEND_FILE_EXTENSIONS = new Set(['.log', '.tmp', '.pyc', '.pyo']);
 const IGNORED_BACKEND_DIRECTORIES = new Set(['__pycache__', '.pytest_cache']);
+const WINDOWS_STARTUP_TASK_NAME = '\\UltraIsolator\\LaunchAtLogon';
+
+function isProcessElevated(options = {}) {
+  const platform = options.platform || process.platform;
+  const run = options.spawnSync || spawnSync;
+  if (platform !== 'win32') {
+    return false;
+  }
+  const script = [
+    '$identity = [Security.Principal.WindowsIdentity]::GetCurrent()',
+    '$principal = New-Object Security.Principal.WindowsPrincipal($identity)',
+    'if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output ELEVATED }'
+  ].join('; ');
+  const result = run('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    script
+  ], {
+    windowsHide: true,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 5000
+  });
+  return !result.error && result.status === 0 && String(result.stdout || '').trim() === 'ELEVATED';
+}
+
+function assertProcessElevated(options = {}) {
+  if (isProcessElevated(options)) {
+    return true;
+  }
+  const error = new Error('Administrator rights are required.');
+  error.code = 'administrator_required';
+  error.exitCode = 5;
+  throw error;
+}
+
+function runTaskScheduler(args, options = {}) {
+  const run = options.spawnSync || spawnSync;
+  return run('schtasks.exe', args, {
+    windowsHide: true,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 10000
+  });
+}
+
+function isWindowsStartupTaskEnabled(options = {}) {
+  const platform = options.platform || process.platform;
+  if (platform !== 'win32') {
+    return false;
+  }
+  const result = runTaskScheduler(['/Query', '/TN', WINDOWS_STARTUP_TASK_NAME], options);
+  return !result.error && result.status === 0;
+}
+
+function setWindowsStartupTask(enabled, executablePath, options = {}) {
+  const platform = options.platform || process.platform;
+  if (platform !== 'win32') {
+    throw new Error('Windows startup tasks are only supported on Windows.');
+  }
+  if (!enabled) {
+    if (!isWindowsStartupTaskEnabled(options)) {
+      return false;
+    }
+    const removed = runTaskScheduler(['/Delete', '/TN', WINDOWS_STARTUP_TASK_NAME, '/F'], options);
+    if (removed.error || removed.status !== 0) {
+      throw new Error(`Failed to remove startup task: ${String(removed.stderr || removed.error || '').trim()}`);
+    }
+    return false;
+  }
+  if (!path.isAbsolute(executablePath) || executablePath.includes('"')) {
+    throw new Error('Startup executable path is invalid.');
+  }
+  const launchArguments = Array.isArray(options.arguments) ? options.arguments.map(String) : [];
+  if (launchArguments.some((argument) => argument.includes('"') || /[\r\n]/.test(argument))) {
+    throw new Error('Startup launch arguments are invalid.');
+  }
+  const taskCommand = [`"${executablePath}"`, ...launchArguments.map((argument) => `"${argument}"`)].join(' ');
+  const created = runTaskScheduler([
+    '/Create',
+    '/TN', WINDOWS_STARTUP_TASK_NAME,
+    '/TR', taskCommand,
+    '/SC', 'ONLOGON',
+    '/RL', 'HIGHEST',
+    '/IT',
+    '/F'
+  ], options);
+  if (created.error || created.status !== 0) {
+    throw new Error(`Failed to create startup task: ${String(created.stderr || created.error || '').trim()}`);
+  }
+  return true;
+}
 
 function backendRoot(app, projectRoot) {
   return app.isPackaged ? path.join(process.resourcesPath, 'backend') : projectRoot;
@@ -451,6 +546,7 @@ function verifyBackendResourceIntegrity(options = {}) {
 
 module.exports = {
   aclGrantsStandardUserWrite,
+  assertProcessElevated,
   appendBackendStartupLog,
   backendConfigPath,
   backendLogPath,
@@ -458,12 +554,16 @@ module.exports = {
   backendRoot,
   closeBackendLogStream,
   createBackendLogStream,
+  isProcessElevated,
   isPathUnderTrustedRoot,
   isPathWritableByStandardUsers,
+  isWindowsStartupTaskEnabled,
   preflightPythonRuntime,
   resolvePackagedPythonCommand,
   resolvePythonCommand,
   runPythonProbe,
+  setWindowsStartupTask,
   validatePythonProvenance,
-  verifyBackendResourceIntegrity
+  verifyBackendResourceIntegrity,
+  WINDOWS_STARTUP_TASK_NAME
 };

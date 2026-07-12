@@ -22,6 +22,7 @@ var/
 .pytest_cache/
 node_modules/
 dist-packaged/
+ui/.runtime/
 
 # Virtual environments
 venv/

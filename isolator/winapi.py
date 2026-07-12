@@ -163,7 +163,6 @@ kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 ntdll = ctypes.WinDLL("ntdll", use_last_error=True)
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 powrprof = ctypes.WinDLL("powrprof", use_last_error=True)
-shell32 = ctypes.WinDLL("shell32", use_last_error=True)
 advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
 
 # WHY: Token-based elevation check (TokenElevation == 20) is the modern
@@ -462,9 +461,6 @@ powrprof.PowerEnumerate.argtypes = [
 powrprof.PowerEnumerate.restype = wintypes.DWORD
 POWER_ACCESS_SCHEME = 16  # ACCESS_SCHEME constant from PowrProf.h
 
-shell32.IsUserAnAdmin.argtypes = []
-shell32.IsUserAnAdmin.restype = wintypes.BOOL
-
 advapi32.OpenProcessToken.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE)]
 advapi32.OpenProcessToken.restype = wintypes.BOOL
 advapi32.GetTokenInformation.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
@@ -482,6 +478,30 @@ kernel32.SetConsoleCtrlHandler.restype = wintypes.BOOL
 
 def nt_success(status):
     return int(status) >= 0
+
+
+def is_process_elevated():
+    """Return True only when the current Windows token is elevated."""
+    if os.name != "nt":
+        return False
+    token_handle = wintypes.HANDLE()
+    try:
+        if not advapi32.OpenProcessToken(
+                kernel32.GetCurrentProcess(), TOKEN_QUERY, ctypes.byref(token_handle)):
+            return False
+        elevation = TOKEN_ELEVATION()
+        returned = wintypes.DWORD()
+        if not advapi32.GetTokenInformation(
+                token_handle, TokenElevation,
+                ctypes.byref(elevation), ctypes.sizeof(elevation),
+                ctypes.byref(returned)):
+            return False
+        return bool(elevation.TokenIsElevated)
+    except Exception:
+        return False
+    finally:
+        if token_handle:
+            kernel32.CloseHandle(token_handle)
 
 
 def make_guid(guid_tuple):

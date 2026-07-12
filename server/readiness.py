@@ -11,6 +11,26 @@ def _check(check_id, label, status, detail, recommendation=None):
     }
 
 
+def _capability_warnings(status):
+    structured = status.get("capability_issues")
+    if isinstance(structured, (list, tuple)) and structured:
+        return [
+            issue
+            for issue in structured
+            if isinstance(issue, dict)
+            and str(issue.get("severity", "")).lower() in {"warning", "error"}
+        ]
+    return [
+        {
+            "code": "legacy_capability_note",
+            "severity": "warning",
+            "message": str(note),
+            "data": {},
+        }
+        for note in status.get("capability_notes", []) or []
+    ]
+
+
 def build_readiness_payload(status, topology, config, cache_hit=False, generated_at=None, cache_ttl_s=300):
     status = dict(status or {})
     topology = dict(topology or {})
@@ -30,6 +50,17 @@ def build_readiness_payload(status, topology, config, cache_hit=False, generated
             },
         }
 
+    configured_games = {
+        str(name).strip().lower()
+        for name in config.get("games", [])
+        if isinstance(name, str) and name.strip()
+    }
+    timer_configured = not bool(config.get("disable_timer_resolution_tweak"))
+    timer_applied = bool(status.get("timer_resolution_applied"))
+    power_configured = not bool(config.get("disable_power_scheme_switch"))
+    power_active = bool(status.get("power_plan_active"))
+    capability_warnings = _capability_warnings(status)
+
     checks = [
         _check(
             "admin",
@@ -40,31 +71,47 @@ def build_readiness_payload(status, topology, config, cache_hit=False, generated
         ),
         _check(
             "power_plan",
-            "Power plan",
-            "ok" if status.get("power_plan_active") else "warning",
-            status.get("power_scheme_in_use") or "Performance power plan is not currently active.",
-            None if status.get("power_plan_active") else "Start the engine and keep power scheme switching enabled.",
+            "Automatic performance mode",
+            "ok" if power_active or power_configured else "warning",
+            (
+                status.get("power_scheme_in_use")
+                or ("Ready to activate when a game starts." if power_configured else "Automatic performance mode is off.")
+            ),
+            None if power_active or power_configured else "Enable automatic performance mode in Settings.",
         ),
         _check(
             "timer_resolution",
-            "Timer resolution",
-            "ok" if status.get("timer_resolution_applied") else "warning",
-            "Timer resolution is applied." if status.get("timer_resolution_applied") else "Timer resolution has not been applied.",
-            None if status.get("timer_resolution_applied") else "Keep disable_timer_resolution_tweak set to false.",
+            "Low-latency timer",
+            "ok" if timer_applied or timer_configured else "warning",
+            "Low-latency timer is active." if timer_applied else (
+                "Ready for the next monitoring session." if timer_configured else "Low-latency timer is off."
+            ),
+            None if timer_applied or timer_configured else "Enable the low-latency timer in Settings.",
+        ),
+        _check(
+            "configured_games",
+            "Games to optimize",
+            "ok" if configured_games else "warning",
+            (
+                f"{len(configured_games)} game{'s' if len(configured_games) != 1 else ''} configured."
+                if configured_games
+                else "No games are configured yet."
+            ),
+            None if configured_games else "Add at least one game in Settings.",
         ),
         _check(
             "background_jailing",
-            "Background jailing",
+            "Background load control",
             "ok" if config.get("enable_background_jailing") else "warning",
-            "Background jailing is enabled." if config.get("enable_background_jailing") else "Background jailing is disabled.",
-            None if config.get("enable_background_jailing") else "Enable background jailing when you want strict isolation.",
+            "Background load is limited while you play." if config.get("enable_background_jailing") else "Background load control is off.",
+            None if config.get("enable_background_jailing") else "Enable background load control for stricter isolation.",
         ),
         _check(
             "ifeo_priority",
-            "IFEO priority",
+            "Game priority boost",
             "ok" if not config.get("disable_game_priority_boost") else "warning",
-            "Game priority and IFEO boost are enabled." if not config.get("disable_game_priority_boost") else "Game priority and IFEO boost are disabled.",
-            None if not config.get("disable_game_priority_boost") else "Set disable_game_priority_boost to false unless anti-cheat testing requires it.",
+            "Game priority boost is ready." if not config.get("disable_game_priority_boost") else "Game priority boost is off.",
+            None if not config.get("disable_game_priority_boost") else "Enable game priority boost unless compatibility testing requires otherwise.",
         ),
         _check(
             "topology",
@@ -75,17 +122,21 @@ def build_readiness_payload(status, topology, config, cache_hit=False, generated
         ),
         _check(
             "recovery",
-            "Recovery state",
+            "Safe restore",
             "ok" if not status.get("persistent_recovery_incomplete") and not status.get("reported_failure_count") else "error",
-            "No recovery backlog is reported." if not status.get("persistent_recovery_incomplete") and not status.get("reported_failure_count") else "Recovery backlog or restore failures are present.",
-            None if not status.get("persistent_recovery_incomplete") and not status.get("reported_failure_count") else "Run recovery before starting a match.",
+            "Windows settings can be restored safely." if not status.get("persistent_recovery_incomplete") and not status.get("reported_failure_count") else "Some Windows settings still need to be restored.",
+            None if not status.get("persistent_recovery_incomplete") and not status.get("reported_failure_count") else "Restore Windows settings before starting a match.",
         ),
         _check(
             "capability_notes",
-            "Capability warnings",
-            "ok" if not status.get("capability_notes") else "warning",
-            "No capability warnings are reported." if not status.get("capability_notes") else str(status.get("capability_notes")[0]),
-            None if not status.get("capability_notes") else "Open logs and review capability warnings.",
+            "Compatibility notices",
+            "ok" if not capability_warnings else "warning",
+            (
+                "No compatibility issues were found."
+                if not capability_warnings
+                else str(capability_warnings[0].get("message") or capability_warnings[0].get("code"))
+            ),
+            None if not capability_warnings else "Review the technical details for this notice.",
         ),
     ]
     summary = {

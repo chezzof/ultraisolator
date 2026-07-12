@@ -18,7 +18,7 @@ class GameCloseDebounceTests(unittest.TestCase):
 
         self.assertEqual(set(), new_games)
         self.assertEqual([], confirmed)
-        self.assertEqual(set(), active)
+        self.assertEqual({12328}, active)
         self.assertEqual({12328: 100.0}, pending)
 
     def test_miss_long_enough_confirms_close(self):
@@ -48,7 +48,7 @@ class GameCloseDebounceTests(unittest.TestCase):
             active, {12328}, pending, 101.0
         )
 
-        self.assertEqual({12328}, new_games)
+        self.assertEqual(set(), new_games)
         self.assertEqual([], confirmed)
         self.assertEqual({12328}, active)
         self.assertEqual({}, pending)

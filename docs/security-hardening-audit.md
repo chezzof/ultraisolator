@@ -15,10 +15,10 @@ Repository-wide production hardening review for the Windows desktop release path
 
 | Area | Finding | Hardening |
 |------|---------|-----------|
-| Localhost API | Unauthenticated loopback callers could drive privileged API routes. | Per-launch bearer token is generated and retained in Electron main, delivered to the Python backend outside renderer JavaScript, and applied only through allowlisted main-process proxy operations. |
+| Localhost API | Unauthenticated loopback callers could drive privileged API routes. | Per-launch bearer token is generated in Electron main, passed to the Python backend, exposed only through preload IPC, and required by API routes when configured. |
 | Localhost API | Cross-origin browser requests could be rejected only after body reads. | Origin/token checks run before body consumption and request bodies are capped at 64 KiB. |
 | Electron | Packaged app could honor arbitrary `EII_RENDERER_URL`. | Packaged builds load only bundled renderer files; URL override remains dev-only and new windows/navigation are denied. |
-| Electron | Elevated packaged app could resolve Python through ambiguous PATH lookup. | Packaged builds require `EII_PYTHON` to be an absolute trusted interpreter path; PATH fallbacks remain development-only. |
+| Electron | Elevated packaged app could resolve Python through ambiguous PATH lookup. | Packaged builds use the private `resources/python` runtime by default; any explicit `EII_PYTHON` override must be an absolute path under a protected allowlisted root. PATH fallbacks remain development-only. |
 | Config | Privileged engine could bypass API config validation. | Engine config loading and `set_log_file()` reuse `ConfigStore` validation, including path confinement. |
 | Safety docs | `config.json.example` contradicted background-jailing opt-in claims. | Example config now keeps background jailing disabled by default. |
 | Supply chain | Floating Python dependency and tag-pinned GitHub Actions. | `psutil` is pinned and core GitHub Actions are pinned to commit SHAs. |
@@ -32,10 +32,10 @@ powershell -File scripts/release-check.ps1
 git diff --check
 ```
 
-The release gate covers Python tests, config dry-run, npm audit, renderer build, deterministic asset generation, UI smoke test, visual/accessibility quality checks, Windows package build, checksum manifest generation, public docs checks, and local artifact ignore checks.
+The release gate covers Python tests, config dry-run, npm audit, renderer build, deterministic asset generation, UI smoke test, Windows package build, checksum manifest generation, public docs checks, and local artifact ignore checks.
 
 ## Remaining Deliberate Limits
 
 - Windows binaries are still unsigned; release notes must keep the SmartScreen/code-signing caveat.
-- Python is not bundled; packaged users must configure a trusted absolute `EII_PYTHON`.
-- Checksums detect corruption but do not authenticate release provenance. Signed checksums, Sigstore attestations, or GitHub artifact attestations should be added before treating binary distribution as fully supply-chain hardened.
+- Python 3.12 and pinned `psutil` are bundled under protected app resources; the release gate executes that packaged interpreter before publishing.
+- Checksums detect corruption but do not authenticate release provenance. Signed checksums or Sigstore/GitHub attestations should be added before treating binary distribution as fully supply-chain hardened.

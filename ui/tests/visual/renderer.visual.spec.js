@@ -8,7 +8,7 @@ test.beforeEach(() => {
 test.describe('renderer visual regression', () => {
   test('Dashboard command center', async ({ page }) => {
     await gotoMockedRenderer(page, '#dashboard');
-    await waitForAppReady(page, '.dashboard-command-center');
+    await waitForAppReady(page, '.dashboard-profile-hero');
     await expect(page.locator('.main-content')).toHaveScreenshot('dashboard-command-center.png', {
       animations: 'disabled'
     });
@@ -24,7 +24,7 @@ test.describe('renderer visual regression', () => {
 
   test('Topology core map', async ({ page }) => {
     await gotoMockedRenderer(page, '#topology');
-    await waitForAppReady(page, '.topology-core-map');
+    await waitForAppReady(page, '.topology-map');
     await expect(page.locator('.topology-layout')).toHaveScreenshot('topology-core-map.png', {
       animations: 'disabled'
     });
@@ -32,7 +32,7 @@ test.describe('renderer visual regression', () => {
 
   test('backend-unavailable Dashboard error state', async ({ page }) => {
     await gotoMockedRenderer(page, '#dashboard', { backendUnavailable: true });
-    await waitForAppReady(page, '.dashboard-backend-error');
+    await waitForAppReady(page, '.dashboard-profile-hero');
     await expect(page.locator('.main-content')).toHaveScreenshot('dashboard-backend-unavailable.png', {
       animations: 'disabled'
     });
