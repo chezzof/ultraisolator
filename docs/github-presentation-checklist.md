@@ -80,7 +80,7 @@ upload it once in Settings.
 - Release badge: `https://img.shields.io/github/v/release/chezzof/ultraisolator?sort=semver`
 - Releases link: `https://github.com/chezzof/ultraisolator/releases`
 - License link: `LICENSE`
-- Benchmark report: `benchmark-results-hud.html`
+- Benchmark report: `docs/benchmarks/cs2-vprof-report.html`
 - Security audit: `docs/security-hardening-audit.md`
 - Codex for OSS: `docs/codex-for-oss-submission.md`
 - Screenshots:

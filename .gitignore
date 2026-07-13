@@ -20,6 +20,7 @@ var/
 .installed.cfg
 *.egg
 .pytest_cache/
+.ruff_cache/
 node_modules/
 dist-packaged/
 ui/.runtime/
@@ -62,6 +63,9 @@ jail_state.json.tmp
 # Cursor / agent workspace (local only)
 .cursor/
 AGENTS.md
+.playwright-mcp/
+.superpowers/
+.codex-*-config.json
 
 # Local benchmark output (raw)
 benchmark-results.html

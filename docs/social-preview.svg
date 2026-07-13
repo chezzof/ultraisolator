@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" fill="none" role="img" aria-label="UltraIsolator — Protect the frame">
   <defs>
     <clipPath id="product-frame">
-      <rect x="758" y="92" width="450" height="456" rx="18"/>
+      <rect x="568" y="84" width="648" height="488" rx="18"/>
     </clipPath>
     <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
       <path d="M40 0H0V40" fill="none" stroke="#182638" stroke-width="1"/>
@@ -9,8 +9,8 @@
   </defs>
 
   <rect width="1280" height="640" fill="#07090E"/>
-  <rect x="716" width="564" height="640" fill="#091421"/>
-  <rect x="716" width="564" height="640" fill="url(#grid)" opacity="0.55"/>
+  <rect x="540" width="740" height="640" fill="#091421"/>
+  <rect x="540" width="740" height="640" fill="url(#grid)" opacity="0.46"/>
   <rect width="1280" height="5" fill="#2F7EF7"/>
 
   <g transform="translate(68 58)">
@@ -24,36 +24,37 @@
   <text x="68" y="256" fill="#F7FAFF" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="72" font-weight="800" letter-spacing="-2.5">PROTECT</text>
   <text x="68" y="328" fill="#F7FAFF" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="72" font-weight="800" letter-spacing="-2.5">THE FRAME.</text>
 
-  <text x="68" y="380" fill="#A9BAD0" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="21" font-weight="500">Keep background scheduling noise away from the game,</text>
-  <text x="68" y="412" fill="#A9BAD0" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="21" font-weight="500">then restore Windows when the session ends.</text>
+  <text x="68" y="372" fill="#A9BAD0" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="19" font-weight="500">Keep background scheduling noise</text>
+  <text x="68" y="402" fill="#A9BAD0" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="19" font-weight="500">away from the game, then restore</text>
+  <text x="68" y="432" fill="#A9BAD0" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="19" font-weight="500">Windows when the session ends.</text>
 
   <g font-family="'JetBrains Mono', Consolas, monospace" font-size="13" font-weight="700" letter-spacing="1">
     <g>
-      <rect x="68" y="456" width="124" height="38" rx="19" fill="#102033" stroke="#234263"/>
-      <circle cx="88" cy="475" r="4" fill="#35D392"/>
-      <text x="101" y="480" fill="#DCE8F7">LOCAL</text>
+      <rect x="68" y="466" width="124" height="38" rx="19" fill="#102033" stroke="#234263"/>
+      <circle cx="88" cy="485" r="4" fill="#35D392"/>
+      <text x="101" y="490" fill="#DCE8F7">LOCAL</text>
     </g>
     <g>
-      <rect x="204" y="456" width="154" height="38" rx="19" fill="#102033" stroke="#234263"/>
-      <circle cx="224" cy="475" r="4" fill="#35D392"/>
-      <text x="237" y="480" fill="#DCE8F7">REVERSIBLE</text>
+      <rect x="204" y="466" width="154" height="38" rx="19" fill="#102033" stroke="#234263"/>
+      <circle cx="224" cy="485" r="4" fill="#35D392"/>
+      <text x="237" y="490" fill="#DCE8F7">REVERSIBLE</text>
     </g>
     <g>
-      <rect x="370" y="456" width="174" height="38" rx="19" fill="#102033" stroke="#234263"/>
-      <circle cx="390" cy="475" r="4" fill="#2F7EF7"/>
-      <text x="403" y="480" fill="#DCE8F7">OPEN SOURCE</text>
+      <rect x="370" y="466" width="164" height="38" rx="19" fill="#102033" stroke="#234263"/>
+      <circle cx="390" cy="485" r="4" fill="#2F7EF7"/>
+      <text x="403" y="490" fill="#DCE8F7">OPEN SOURCE</text>
     </g>
   </g>
 
   <text x="68" y="566" fill="#6F839B" font-family="'JetBrains Mono', Consolas, monospace" font-size="14" font-weight="650" letter-spacing="1.5">WINDOWS 10/11  ·  MIT LICENSED  ·  NO CLOUD ACCOUNT</text>
 
-  <rect x="742" y="76" width="482" height="488" rx="22" fill="#0E1A28" stroke="#29445F" stroke-width="2"/>
-  <rect x="758" y="92" width="450" height="456" rx="18" fill="#07111C"/>
-  <image href="screenshots/dashboard.png" x="758" y="92" width="450" height="456" preserveAspectRatio="xMidYMid slice" clip-path="url(#product-frame)"/>
-  <rect x="758" y="92" width="450" height="42" rx="18" fill="#0A1624" opacity="0.96"/>
-  <rect x="758" y="118" width="450" height="16" fill="#0A1624" opacity="0.96"/>
-  <circle cx="780" cy="113" r="4" fill="#35D392"/>
-  <circle cx="795" cy="113" r="4" fill="#2F7EF7"/>
-  <circle cx="810" cy="113" r="4" fill="#61758D"/>
-  <text x="830" y="118" fill="#DCE8F7" font-family="'JetBrains Mono', Consolas, monospace" font-size="11" font-weight="700" letter-spacing="1.2">SESSION CONTROL</text>
+  <rect x="552" y="68" width="680" height="520" rx="24" fill="#0E1A28" stroke="#29445F" stroke-width="2"/>
+  <rect x="568" y="84" width="648" height="488" rx="18" fill="#07111C"/>
+  <image href="screenshots/dashboard.png" x="568" y="111" width="648" height="461" preserveAspectRatio="xMidYMid meet" clip-path="url(#product-frame)"/>
+  <rect x="568" y="84" width="648" height="38" rx="18" fill="#0A1624" opacity="0.98"/>
+  <rect x="568" y="106" width="648" height="16" fill="#0A1624" opacity="0.98"/>
+  <circle cx="590" cy="103" r="4" fill="#35D392"/>
+  <circle cx="605" cy="103" r="4" fill="#2F7EF7"/>
+  <circle cx="620" cy="103" r="4" fill="#61758D"/>
+  <text x="640" y="108" fill="#DCE8F7" font-family="'JetBrains Mono', Consolas, monospace" font-size="11" font-weight="700" letter-spacing="1.2">SESSION CONTROL</text>
 </svg>

@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="#install-on-windows">
+  <a href="https://github.com/chezzof/ultraisolator/releases/latest">
     <img src="docs/social-preview.png" alt="UltraIsolator — protect the frame with local, reversible Windows process isolation" width="100%">
   </a>
 </p>
@@ -7,8 +7,8 @@
 <h1 align="center">UltraIsolator</h1>
 
 <p align="center">
-  <strong>Protect the frame.</strong><br>
-  A local, reversible Windows process tuner that keeps background scheduling noise away from the game, then returns Windows to its previous state when the session ends.
+  <strong>Local Windows process isolation for smoother competitive-game sessions.</strong><br>
+  Detect the game, protect critical processes, reduce eligible background interference, and restore Windows when the session ends.
 </p>
 
 <p align="center">
@@ -19,58 +19,62 @@
 </p>
 
 <p align="center">
-  <a href="#install-on-windows"><strong>Install on Windows</strong></a>
+  <a href="https://github.com/chezzof/ultraisolator/releases/latest"><strong>Download for Windows</strong></a>
   &nbsp;&nbsp;·&nbsp;&nbsp;
   <a href="#how-it-works">How it works</a>
   &nbsp;&nbsp;·&nbsp;&nbsp;
   <a href="#measured-on-cs2">Measured results</a>
   &nbsp;&nbsp;·&nbsp;&nbsp;
-  <a href="#safety-first">Safety</a>
+  <a href="#safety-by-design">Safety</a>
 </p>
 
-UltraIsolator watches for configured games, prepares a clean CPU layout, and applies only the tuning selected for the current session. Game detection is independent from process-tuning success, so anti-cheat access restrictions do not make an active game disappear from the interface.
+<p align="center"><sub>Windows 10/11 · Administrator access required · Local by design · MIT licensed</sub></p>
 
-Windows 10/11 · Administrator access required · Local by design · MIT licensed
+## How it works
 
-## How It Works
-
-| 01 — Detect | 02 — Review |
+| 01 — Detect | 02 — Prepare |
 |---|---|
-| Watches configured games and scans Steam and Epic libraries. | Checks administrator access, CPU topology, configured games, and safe-restore readiness. |
+| Watches configured game processes and scans Steam and Epic libraries. | Checks administrator access, CPU topology, configured games, and restore readiness. |
 
-| 03 — Isolate | 04 — Restore |
+| 03 — Protect | 04 — Restore |
 |---|---|
-| Applies the selected CPU, process, timer, and power tuning for the active session. | Returns tracked Windows state when the game closes or you restore manually. |
+| Applies the selected CPU, priority, timer, and power tuning for the active session. | Returns tracked Windows state when the game closes or you restore manually. |
 
-Monitoring starts automatically whenever the desktop app launches. A manual pause lasts only for that app session; the next launch resumes monitoring.
+Game detection is independent from process-tuning success. A game remains visible when anti-cheat or Windows access rules block direct tuning.
 
 ## Why UltraIsolator
 
-- **Game-aware:** detection follows the game process before tuning, including access-denied and conservative anti-cheat paths.
-- **Local:** the desktop UI talks only to an authenticated loopback API. No cloud account is required.
-- **Protected:** Windows, Steam, FACEIT, anti-cheat, terminals, and configured protected processes stay outside background isolation.
-- **Reversible:** process state, timer resolution, IFEO hints, and the original power plan are restored after the session.
+- **Game-aware.** Detection follows the active game before tuning, including access-denied and conservative anti-cheat paths.
+- **Protected by default.** Windows, Steam, FACEIT, anti-cheat, terminals, and configured protected processes stay outside background isolation.
+- **Local.** The desktop UI communicates only with an authenticated loopback API. No cloud account is required.
+- **Reversible.** Process state, timer resolution, IFEO hints, and the original power plan are restored after the session.
 
-Background isolation is optional and defaults to off. When enabled, it is batched to avoid turning maintenance work into a new source of frame-time noise.
+Background isolation is optional and defaults to off. When enabled, it runs in batches so maintenance work does not become a new source of frame-time noise.
 
-## Safety First
+## Real product. Local control.
 
-UltraIsolator changes sensitive Windows scheduling controls. Read these boundaries before installation:
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="UltraIsolator Overview showing session protection, game state, safe restore, and local system readiness" width="100%">
+</p>
 
-- Windows 10/11 only. Mutating desktop, CLI, benchmark, and recovery paths require Administrator elevation and fail closed without it; `--dry-run` remains available to standard users.
-- The production desktop package is NSIS-only and installs per-machine under `Program Files`. The installer currently appears as **Esports Isolator PRO** to preserve the existing Windows package identity.
-- End users do not install Python separately. The package includes a private Python 3.12 runtime and `psutil`.
-- Packaged startup verifies a backend resource integrity manifest stored in the trusted app bundle before launching code from `resources/backend`.
-- Startup fails closed if the Python runtime, backend, or manifest is standard-user writable, missing, or does not match the signed build manifest.
-- Production ignores arbitrary inherited Python paths. `EII_ALLOW_UNTRUSTED_PACKAGED_PYTHON` is restricted to non-production developer diagnostics.
-- Use `anti_cheat_mode: "conservative"` for stricter anti-cheat stacks. UltraIsolator does not inject into game or anti-cheat processes.
-- The application does not download or execute remote code at runtime.
+The Overview keeps the current game, protection state, next required action, and safe-restore status in one place. Settings and CPU Map use the same responsive layout in English and Russian.
 
-Local logs and recovery files can contain process names and local paths. Review them before sharing.
+<details>
+<summary><strong>See Settings and CPU Map</strong></summary>
+
+<br>
+
+<img src="docs/screenshots/settings.png" alt="UltraIsolator Settings with aligned responsive toggles" width="100%">
+
+<br>
+
+<img src="docs/screenshots/topology.png" alt="UltraIsolator CPU Map showing game, background, and housekeeping partitions" width="100%">
+
+</details>
 
 ## Measured on CS2
 
-The repository includes a Counter-Strike 2 VProf comparison of the same workload with and without the isolator. The strongest result was lower high-percentile frame-time spikes, not a promise of universal FPS gain.
+The included Counter-Strike 2 VProf comparison uses the same workload with and without UltraIsolator. The strongest result was lower high-percentile frame-time spikes—not a promise of universal FPS gain.
 
 | VProf metric | Without | With UltraIsolator | Change |
 |---|---:|---:|---:|
@@ -81,56 +85,37 @@ The repository includes a Counter-Strike 2 VProf comparison of the same workload
 
 Results are workload- and hardware-specific. Reproduce the test on the target machine before making tuning decisions.
 
-[Open the benchmark report](benchmark-results-hud.html) · [Inspect the structured summary](docs/benchmarks/cs2-vprof-summary.json)
+[Open the benchmark report](docs/benchmarks/cs2-vprof-report.html) · [Inspect the structured summary](docs/benchmarks/cs2-vprof-summary.json)
 
 ## Install on Windows
 
-1. Open [Releases](https://github.com/chezzof/ultraisolator/releases/latest).
-2. Download the NSIS installer and the matching `SHA256SUMS.txt`.
+1. Open the [latest release](https://github.com/chezzof/ultraisolator/releases/latest).
+2. Download the NSIS installer and matching `SHA256SUMS.txt`.
 3. Verify the checksum, run the installer, and approve the Windows UAC prompt.
-4. Launch UltraIsolator. Monitoring starts automatically and the Overview screen shows the active game when it is detected.
+4. Launch UltraIsolator. Monitoring starts automatically and Overview shows the game when it is detected.
 
-> **Release asset check:** current `main` produces a per-machine NSIS installer with a bundled Python runtime. If the release page still lists a portable build, treat it as a legacy artifact and build current `main` instead.
+> Current `main` produces a per-machine NSIS installer with a private Python runtime. A portable asset on an older release is legacy and should not be used for the current build.
 
 The installer is currently unsigned. Windows may show an unknown-publisher warning; verify the published SHA-256 checksum before continuing.
 
-## Build from Source
+## Safety by design
 
-Requirements: Windows 10/11, Python 3.12+, Node.js, and an Administrator terminal for mutating runs.
+- Mutating desktop, CLI, benchmark, and recovery paths require Administrator elevation and fail closed without it. `--dry-run` remains available to standard users.
+- UltraIsolator does not inject into game or anti-cheat processes.
+- The application does not download or execute remote code at runtime.
+- Packaged startup verifies the bundled backend, private Python runtime, resource permissions, and integrity manifest before launching.
+- Local logs and recovery files can contain process names and local paths. Review them before sharing.
 
-```powershell
-git clone https://github.com/chezzof/ultraisolator.git
-cd ultraisolator
-python -m pip install -r requirements.txt
-copy config.json.example config.json
-python best_isolator.py --dry-run
-python best_isolator.py
-```
+<details>
+<summary><strong>Packaging and anti-cheat details</strong></summary>
 
-The dry run validates configuration without requiring elevation or changing the system.
+- Production is NSIS-only and installs per-machine under `Program Files`. The installer currently appears as **Esports Isolator PRO** to preserve the existing Windows package identity.
+- End users do not install Python separately. The package includes Python 3.12 and `psutil`.
+- Startup fails closed when the runtime, backend, or manifest is missing, modified, or standard-user writable.
+- Production ignores arbitrary inherited Python paths. Developer overrides are restricted to non-production diagnostics.
+- Use `anti_cheat_mode: "conservative"` for stricter anti-cheat stacks.
 
-## Desktop UI
-
-The Electron + React desktop app runs the same Python engine, keeps monitoring alive in the tray, and uses an allowlisted IPC proxy instead of exposing the API token to the renderer.
-
-```powershell
-python -m pip install -r requirements.txt
-npm --prefix ui install
-npm --prefix ui run dev
-```
-
-Build and smoke-check the desktop surface:
-
-```powershell
-npm --prefix ui run build:renderer
-npm --prefix ui run build:assets
-npm --prefix ui run build:backend-manifest
-npm --prefix ui run smoke
-npm --prefix ui run build
-npm --prefix ui run verify:packaged-runtime
-```
-
-Production packaging and the bundled-runtime provenance policy are documented in [BUILDING.md](BUILDING.md).
+</details>
 
 ## Configuration
 
@@ -150,18 +135,59 @@ Copy [`config.json.example`](config.json.example) to `config.json`. The most imp
 
 See [`config.json.example`](config.json.example) for the complete reference.
 
-## CLI
+## Build and contribute
+
+<details>
+<summary><strong>Build from source</strong></summary>
+
+Requirements: Windows 10/11, Python 3.12+, Node.js, and an Administrator terminal for mutating runs.
+
+```powershell
+git clone https://github.com/chezzof/ultraisolator.git
+cd ultraisolator
+python -m pip install -r requirements.txt
+copy config.json.example config.json
+python best_isolator.py --dry-run
+python best_isolator.py
+```
+
+The dry run validates configuration without requiring elevation or changing the system. See [BUILDING.md](BUILDING.md) for production packaging.
+
+</details>
+
+## Desktop UI
+
+The Electron + React desktop app runs the same Python engine, keeps monitoring available from the tray, and exposes the backend only through an allowlisted IPC bridge.
+
+<details>
+<summary><strong>Desktop UI development</strong></summary>
+
+```powershell
+python -m pip install -r requirements.txt
+npm --prefix ui install
+npm --prefix ui run dev
+```
+
+```powershell
+npm --prefix ui run build:renderer
+npm --prefix ui run test:ui-quality
+npm --prefix ui run smoke
+npm --prefix ui run build
+npm --prefix ui run verify:packaged-runtime
+```
+
+</details>
+
+<details>
+<summary><strong>CLI and architecture</strong></summary>
 
 ```powershell
 python best_isolator.py
 python best_isolator.py --config myconfig.json
 python best_isolator.py --dry-run
 python best_isolator.py --recover
-python best_isolator.py --log-file session.log
 python best_isolator.py --benchmark --benchmark-duration-sec 30
 ```
-
-## Architecture
 
 ```text
 Electron + React renderer
@@ -177,13 +203,15 @@ Bundled Python engine
   └─ protected-process and anti-cheat boundaries
 ```
 
-## Verification
+</details>
+
+<details>
+<summary><strong>Verification</strong></summary>
 
 ```powershell
 python -m unittest discover -s tests -p "test_*.py" -v
-npm --prefix ui test
-npm --prefix ui run build:renderer
-npm --prefix ui run smoke
+npm --prefix ui run test:unit
+npm --prefix ui run test:ui-quality
 ```
 
 Full Windows release gate:
@@ -192,15 +220,9 @@ Full Windows release gate:
 powershell -File scripts/release-check.ps1
 ```
 
-The gate runs the Python and Node suites, configuration dry-run, renderer build, smoke test, package build, bundled-runtime verification, manifest checks, and checksum generation.
+</details>
 
-## Contributing
-
-Contributions should be reproducible, anti-cheat-aware, and reversible. Start with [CONTRIBUTING.md](CONTRIBUTING.md), include Windows/Python/game context in bug reports, and run the verification commands before opening a pull request.
-
-## Security
-
-Report vulnerabilities privately through GitHub Security Advisories. See [SECURITY.md](SECURITY.md) for scope and response expectations.
+Contributions should be reproducible, anti-cheat-aware, and reversible. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Report vulnerabilities privately through GitHub Security Advisories as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
