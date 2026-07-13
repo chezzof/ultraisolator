@@ -132,6 +132,10 @@ export function validateConfigDraft(draft, schema) {
         errors[field] = validationError('minimum', '{{field}} must be at least {{min}}.', { min: spec.min }, field);
         continue;
       }
+      if (typeof spec.max === 'number' && numeric > spec.max) {
+        errors[field] = validationError('maximum', '{{field}} must be no more than {{max}}.', { max: spec.max }, field);
+        continue;
+      }
       config[field] = numeric;
     }
   }

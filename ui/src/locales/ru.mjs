@@ -456,6 +456,7 @@ export const ru = {
     'validation.number': 'В поле «{{field}}» должно быть число.',
     'validation.integer': 'В поле «{{field}}» должно быть целое число.',
     'validation.minimum': 'Значение «{{field}}» должно быть не меньше {{min}}.',
+    'validation.maximum': 'Значение «{{field}}» должно быть не больше {{max}}.',
     'settings.section.Games & libraries': 'Игры и библиотеки',
     'settings.section.Background isolation': 'Фоновая нагрузка',
     'settings.section.Detection & recovery': 'Обнаружение и восстановление',

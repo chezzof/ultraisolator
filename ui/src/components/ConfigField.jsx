@@ -11,6 +11,14 @@ export function ConfigField({ field, spec, value, error, onChange }) {
     field === 'anti_cheat_mode' ? t(`antiCheat.${choice}`, choice) : t(`choice.${field}.${choice}`, choice)
   );
   const fieldClassName = `settings-field field-${field}`;
+  const updateNumericValue = (nextValue) => {
+    const numeric = Number(nextValue);
+    if (nextValue && typeof spec.max === 'number' && (!Number.isFinite(numeric) || numeric > spec.max)) {
+      onChange(String(spec.max));
+      return;
+    }
+    onChange(nextValue);
+  };
   if (spec.type === 'bool') {
     const inverted = POSITIVE_BOOLEAN_FIELDS.has(field);
     return (
@@ -45,9 +53,10 @@ export function ConfigField({ field, spec, value, error, onChange }) {
         <input
           type="number"
           min={spec.min}
+          max={spec.max}
           step={spec.type === 'int' ? 1 : 'any'}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => updateNumericValue(event.target.value)}
         />
       ) : (
         <input

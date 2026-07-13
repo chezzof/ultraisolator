@@ -66,6 +66,22 @@ test.describe('renderer visual regression', () => {
     await expect(page.locator('.first-run-brand-mark')).toHaveAttribute('draggable', 'false');
   });
 
+  test('Settings clamps unsafe numeric values to schema maximums', async ({ page }) => {
+    await gotoMockedRenderer(page, '#settings');
+    await waitForAppReady(page, '.settings-page');
+
+    const batchSize = page.locator('.field-maintenance_jail_batch_size input');
+    const reviewInterval = page.locator('.field-maintenance_jail_interval_ms input');
+
+    await expect(batchSize).toHaveAttribute('max', '64');
+    await batchSize.fill('222222');
+    await expect(batchSize).toHaveValue('64');
+
+    await expect(reviewInterval).toHaveAttribute('max', '300000');
+    await reviewInterval.fill('333333333333330');
+    await expect(reviewInterval).toHaveValue('300000');
+  });
+
   for (const language of ['en', 'ru']) {
     test(`Settings cards stay balanced in ${language.toUpperCase()}`, async ({ page }) => {
       await gotoMockedRenderer(page, '#settings', { appSettings: { language } });

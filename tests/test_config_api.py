@@ -24,7 +24,9 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertEqual("app_profiles", defaults["schema"]["app_profiles"]["type"])
         self.assertEqual(["idle", "below_normal", "normal", "above_normal", "high"], defaults["schema"]["app_profiles"]["priority_choices"])
         self.assertEqual(50, defaults["schema"]["poll_interval_active_ms"]["min"])
+        self.assertEqual(30000, defaults["schema"]["poll_interval_active_ms"]["max"])
         self.assertEqual(5000, defaults["schema"]["maintenance_jail_interval_ms"]["min"])
+        self.assertEqual(300000, defaults["schema"]["maintenance_jail_interval_ms"]["max"])
         self.assertEqual(["aggressive", "conservative"], defaults["schema"]["anti_cheat_mode"]["choices"])
         self.assertEqual([], defaults["reload"]["hot_reloadable"])
         self.assertTrue(defaults["reload"]["restart_required_when_running"])
@@ -91,6 +93,37 @@ class ConfigStoreTests(unittest.TestCase):
         fields = {error["field"] for error in ctx.exception.errors}
         self.assertIn("poll_interval_active_ms", fields)
         self.assertIn("housekeeping_cores", fields)
+
+    def test_numeric_fields_reject_values_above_safe_maximums(self):
+        store = ConfigStore("__missing_config__.json")
+        maximums = {
+            "housekeeping_cores": 16,
+            "hot_thread_limit": 64,
+            "thread_sample_window_ms": 5000,
+            "poll_interval_idle_ms": 60000,
+            "poll_interval_active_ms": 30000,
+            "maintenance_jail_batch_size": 64,
+            "maintenance_jail_interval_ms": 300000,
+            "maintenance_jail_batch_cooldown_ms": 60000,
+            "game_close_debounce_s": 60,
+            "game_exit_restore_delay_s": 300,
+            "gc_full_collect_interval_s": 86400,
+            "maintenance_skip_after_quiet_cycles": 100,
+            "hot_thread_refresh_ms": 60000,
+        }
+
+        schema = store.defaults_response()["schema"]
+        for field, maximum in maximums.items():
+            self.assertEqual(maximum, schema[field]["max"])
+            self.assertEqual(maximum, store.validate({field: maximum}, partial=True)[field])
+
+        with self.assertRaises(ConfigError) as ctx:
+            store.update({field: maximum + 1 for field, maximum in maximums.items()}, running=False)
+
+        errors = {error["field"]: error["message"] for error in ctx.exception.errors}
+        self.assertEqual(set(maximums), set(errors))
+        for field, maximum in maximums.items():
+            self.assertIn(f"must be <= {maximum}", errors[field])
 
     def test_float_fields_reject_non_finite_values(self):
         store = ConfigStore("__missing_config__.json")

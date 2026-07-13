@@ -428,6 +428,7 @@ export const en = {
     'validation.number': '{{field}} must be a number.',
     'validation.integer': '{{field}} must be a whole number.',
     'validation.minimum': '{{field}} must be at least {{min}}.',
+    'validation.maximum': '{{field}} must be no more than {{max}}.',
     'settings.section.Games & libraries': 'Games & libraries',
     'settings.section.Background isolation': 'Background isolation',
     'settings.section.Detection & recovery': 'Detection & recovery',
