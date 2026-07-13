@@ -300,7 +300,7 @@ async function installRendererMock(page, options = {}) {
   }, {
     mockOptions: {
       backendUnavailable: Boolean(options.backendUnavailable),
-      appSettings: DEFAULT_APP_SETTINGS,
+      appSettings: { ...DEFAULT_APP_SETTINGS, ...options.appSettings },
       defaultConfig: DEFAULT_CONFIG,
       configSchema: CONFIG_SCHEMA,
       snapshot: SNAPSHOT,

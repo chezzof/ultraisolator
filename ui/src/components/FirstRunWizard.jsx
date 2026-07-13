@@ -289,7 +289,7 @@ export function FirstRunWizard({ live }) {
       <div className="first-run-panel" ref={panelRef} tabIndex="-1">
         <aside className="first-run-aside" aria-label={t('firstRun.setupProgress', 'Setup progress')}>
           <div className="first-run-brand">
-            <img className="first-run-brand-mark" src={brandLogo} alt="" />
+            <img className="first-run-brand-mark" src={brandLogo} alt="" draggable={false} />
             <span>
               <strong>{t('app.brand', 'UltraIsolator')}</strong>
               <small>{t('firstRun.brandDetail', 'Competitive session control')}</small>

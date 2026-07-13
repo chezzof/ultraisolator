@@ -3,7 +3,6 @@ import {
   Content,
   Header,
   HeaderGlobalBar,
-  HeaderName,
   SideNav,
   SideNavItems,
   SideNavLink
@@ -21,7 +20,6 @@ import { SystemAnalysis } from './components/SystemAnalysis.jsx';
 import { NotificationCenter } from './components/NotificationCenter.jsx';
 import { FirstRunWizard } from './components/FirstRunWizard.jsx';
 import { I18nProvider, useI18n } from './i18n.jsx';
-import brandMark from '../assets/icon.png';
 
 const PAGE_COMPONENTS = {
   dashboard: DashboardPage,
@@ -56,13 +54,16 @@ function AppShell() {
     document.querySelector('.main-content')?.scrollTo({ top: 0, left: 0 });
   }, [activePageId]);
 
+  const navigateToPage = (pageId) => {
+    setActivePageId(pageId);
+    if (window.location.hash !== `#${pageId}`) {
+      window.location.hash = pageId;
+    }
+  };
+
   return (
     <div className="app-shell">
       <Header aria-label="UltraIsolator">
-        <HeaderName href="#" prefix="">
-          <img className="app-brand-mark" src={brandMark} alt="" />
-          <span>{t('app.brand', 'UltraIsolator')}</span>
-        </HeaderName>
         <HeaderGlobalBar>
           <div className="header-status">
             <span className={`stream-dot ${live.connectionState}`} aria-hidden="true" />
@@ -76,12 +77,13 @@ function AppShell() {
           {PAGES.map((page) => (
             <SideNavLink
               key={page.id}
-              href={`#${page.id}`}
+              as="button"
+              type="button"
               isActive={activePageId === page.id}
               renderIcon={page.renderIcon}
               title={t(page.labelKey, page.label)}
               aria-current={activePageId === page.id ? 'page' : undefined}
-              onClick={() => setActivePageId(page.id)}
+              onClick={() => navigateToPage(page.id)}
             >
               {t(page.labelKey, page.label)}
             </SideNavLink>

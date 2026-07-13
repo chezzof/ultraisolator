@@ -15,12 +15,90 @@ test.describe('renderer visual regression', () => {
   });
 
   test('Settings safety hierarchy', async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
     await gotoMockedRenderer(page, '#settings');
     await waitForAppReady(page, '.settings-page');
+    await page.locator('.section-detection').scrollIntoViewIfNeeded();
     await expect(page.locator('.main-content')).toHaveScreenshot('settings-safety-hierarchy.png', {
       animations: 'disabled'
     });
   });
+
+  test('Navigation uses buttons while preserving hash history', async ({ page }) => {
+    await gotoMockedRenderer(page, '#dashboard');
+    await waitForAppReady(page, '.dashboard-profile-hero');
+
+    const settings = page.getByRole('button', { name: 'Settings', exact: true });
+    const activity = page.getByRole('button', { name: 'Activity', exact: true });
+
+    await expect(page.locator('.cds--header__name')).toHaveCount(0);
+    await expect(page.locator('.cds--side-nav a')).toHaveCount(0);
+    await expect(activity).toHaveCSS('display', 'flex');
+    await expect(activity).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+
+    const alignment = await activity.evaluate((button) => {
+      const icon = button.querySelector('.cds--side-nav__icon').getBoundingClientRect();
+      const label = button.querySelector('.cds--side-nav__link-text').getBoundingClientRect();
+      return Math.abs((icon.top + icon.height / 2) - (label.top + label.height / 2));
+    });
+    expect(alignment).toBeLessThanOrEqual(1);
+
+    await settings.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/#settings$/);
+    await expect(settings).toHaveAttribute('aria-current', 'page');
+
+    await activity.click();
+    await expect(page).toHaveURL(/#logs$/);
+    await page.goBack();
+    await expect(page).toHaveURL(/#settings$/);
+    await expect(settings).toHaveAttribute('aria-current', 'page');
+
+    const overview = page.getByRole('button', { name: 'Overview', exact: true });
+    await overview.focus();
+    await page.keyboard.press('Space');
+    await expect(page).toHaveURL(/#dashboard$/);
+  });
+
+  test('First-run logo is not draggable', async ({ page }) => {
+    await gotoMockedRenderer(page, '#dashboard', { appSettings: { firstRunCompleted: false } });
+    await expect(page.locator('.first-run-brand-mark')).toBeVisible();
+    await expect(page.locator('.first-run-brand-mark')).toHaveAttribute('draggable', 'false');
+  });
+
+  for (const language of ['en', 'ru']) {
+    test(`Settings cards stay balanced in ${language.toUpperCase()}`, async ({ page }) => {
+      await gotoMockedRenderer(page, '#settings', { appSettings: { language } });
+      await waitForAppReady(page, '.settings-page');
+
+      for (const width of [980, 1180, 1280, 1440, 1920]) {
+        await page.setViewportSize({ width, height: 1080 });
+        const geometry = await page.evaluate(() => {
+          const detection = document.querySelector('.section-detection').getBoundingClientRect();
+          const tuning = document.querySelector('.section-tuning').getBoundingClientRect();
+          const specialists = document.querySelector('.section-specialists').getBoundingClientRect();
+          return {
+            detectionLeft: detection.left,
+            detectionWidth: detection.width,
+            detectionBottom: detection.bottom,
+            tuningLeft: tuning.left,
+            tuningTop: tuning.top,
+            tuningWidth: tuning.width,
+            tuningBottom: tuning.bottom,
+            specialistsTop: specialists.top,
+            pageWidth: document.documentElement.clientWidth,
+            scrollWidth: document.documentElement.scrollWidth
+          };
+        });
+
+        expect(geometry.detectionLeft).toBe(geometry.tuningLeft);
+        expect(geometry.detectionWidth).toBe(geometry.tuningWidth);
+        expect(geometry.tuningTop - geometry.detectionBottom).toBe(16);
+        expect(geometry.specialistsTop - geometry.tuningBottom).toBe(16);
+        expect(geometry.scrollWidth).toBe(geometry.pageWidth);
+      }
+    });
+  }
 
   test('Topology core map', async ({ page }) => {
     await gotoMockedRenderer(page, '#topology');
